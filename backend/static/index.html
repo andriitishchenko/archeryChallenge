@@ -1,0 +1,3114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ArrowMatch — Archery Challenge Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+/* =============================================
+   ARROWMATCH — Archery Challenge Platform
+   Design: Dark forest with amber/gold accents
+   Typefaces: Archivo Black + Archivo + DM Mono
+   ============================================= */
+
+:root {
+  /* Core palette */
+  --bg:        #0d1117;
+  --bg-card:   #161c26;
+  --bg-raised: #1e2733;
+  --border:    #2a3341;
+  --border-lit: #3a4d60;
+
+  /* Accent — amber/gold */
+  --accent:     #e8a328;
+  --accent-dim: #b07e1e;
+  --accent-glow: rgba(232, 163, 40, 0.18);
+
+  /* Text */
+  --text:       #e8ecf0;
+  --text-muted: #7a8fa8;
+  --text-dim:   #4a5a6e;
+
+  /* Status */
+  --green:  #3ecf8e;
+  --red:    #f26060;
+  --blue:   #4fa8e8;
+
+  /* Score colors */
+  --score-10: #e8a328;
+  --score-9:  #e8c828;
+  --score-8:  #3ecf8e;
+  --score-low: #7a8fa8;
+
+  /* Spacing */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  /* Nav heights */
+  --topnav-h: 52px;
+  --botnav-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ==================== RESET ==================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+body { font-family: 'Archivo', sans-serif; font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+input, select, textarea, button { font-family: inherit; font-size: inherit; }
+a { color: var(--accent); text-decoration: none; }
+button { cursor: pointer; border: none; background: none; }
+
+/* ==================== APP SHELL ==================== */
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ==================== TOP NAV ==================== */
+#topnav {
+  height: var(--topnav-h);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+#topnav.hidden { display: none; }
+.nav-left, .nav-right { display: flex; align-items: center; gap: 8px; min-width: 80px; }
+.nav-right { justify-content: flex-end; }
+.nav-center { flex: 1; text-align: center; }
+#nav-title { font-family: 'Archivo Black', sans-serif; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.logo-sm { font-family: 'Archivo Black', sans-serif; font-size: 13px; letter-spacing: 0.1em; color: var(--accent); }
+.nav-btn { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 18px; transition: background 0.15s, color 0.15s; }
+.nav-btn:hover { background: var(--bg-raised); color: var(--text); }
+.nav-btn.hidden { visibility: hidden; }
+
+/* ==================== SCENES ==================== */
+.scene {
+  position: absolute; inset: 0;
+  top: var(--topnav-h);
+  bottom: var(--botnav-h);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+.scene.active { opacity: 1; pointer-events: all; }
+#topnav.hidden ~ .scene,
+.scene:first-child { top: 0; }
+#bottomnav.hidden ~ .scene,
+#scene-entry.active { bottom: 0; }
+
+/* Scene scroll container */
+.scene-scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 16px 20px;
+  scroll-behavior: smooth;
+  margin-top: 50px;
+}
+.scene-scroll::-webkit-scrollbar { display: none; }
+
+/* Scene header */
+.scene-header { margin-bottom: 20px; }
+.scene-header h2 { font-family: 'Archivo Black', sans-serif; font-size: 26px; letter-spacing: -0.02em; line-height: 1.1; }
+.scene-subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+
+/* ==================== ENTRY SCENE ==================== */
+#scene-entry {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+#scene-entry.active { display: flex; }
+
+.entry-bg {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.entry-target {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  animation: target-pulse 4s ease-in-out infinite;
+}
+.entry-target { width: 320px; height: 320px; top: -60px; left: 50%; transform: translateX(-50%); opacity: 0.4; }
+.entry-target.t2 { width: 220px; height: 220px; top: -20px; left: 50%; transform: translateX(-50%); opacity: 0.25; animation-delay: 0.5s; }
+.entry-target.t3 { width: 120px; height: 120px; top: 20px; left: 50%; transform: translateX(-50%); opacity: 0.15; animation-delay: 1s; }
+
+@keyframes target-pulse {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: inherit; }
+  50% { transform: translateX(-50%) scale(1.04); }
+}
+
+.entry-content {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 24px 40px;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.entry-logo { text-align: center; padding: 60px 0 40px; }
+.logo-hex { font-size: 48px; line-height: 1; color: var(--accent); animation: hex-spin 8s linear infinite; display: inline-block; }
+@keyframes hex-spin { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
+.logo-text { font-family: 'Archivo Black', sans-serif; font-size: 32px; letter-spacing: 0.08em; background: linear-gradient(135deg, var(--accent), #f0d070); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.logo-tagline { color: var(--text-muted); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; margin-top: 6px; }
+
+.entry-form { display: flex; flex-direction: column; gap: 12px; }
+.entry-hint { text-align: center; font-size: 13px; color: var(--text-muted); }
+.entry-hint a { color: var(--accent); }
+
+/* ==================== CARDS ==================== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  margin-bottom: 12px;
+}
+.card-title { font-family: 'Archivo Black', sans-serif; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 14px; }
+
+/* ==================== FORMS ==================== */
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+.form-row { display: flex; gap: 12px; }
+.form-group.half { flex: 1; }
+.mt-sm { margin-top: 12px; }
+.mt-lg { margin-top: 20px; }
+.mt-xs { margin-top: 4px; }
+.pb-safe { padding-bottom: calc(20px + var(--safe-bottom)); }
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="datetime-local"],
+select,
+textarea {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 12px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a8fa8' stroke-width='2' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+textarea { resize: none; }
+.char-count { text-align: right; font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+.req { color: var(--accent); }
+.opt { font-size: 11px; color: var(--text-dim); font-family: 'Archivo', sans-serif; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* Radio group */
+.radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.radio-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.radio-opt input[type="radio"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.radio-opt span { font-size: 14px; }
+
+/* Chips */
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.chip:active { transform: scale(0.96); }
+.chip.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Toggle row */
+.toggle-row { display: flex; background: var(--bg-raised); border-radius: 10px; padding: 3px; gap: 3px; }
+.toggle-btn {
+  flex: 1; padding: 9px; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+.toggle-btn.active { background: var(--bg-card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+
+/* ==================== BUTTONS ==================== */
+.btn-primary {
+  background: var(--accent);
+  color: #0d1117;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  padding: 15px 28px;
+  border-radius: var(--r-md);
+  transition: all 0.15s;
+  text-align: center;
+}
+.btn-primary:hover { background: #f0b83e; }
+.btn-primary:active { transform: scale(0.98); }
+
+.btn-secondary {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 12px 20px;
+  border-radius: var(--r-md);
+  transition: all 0.15s;
+  text-align: center;
+}
+.btn-secondary:active { transform: scale(0.98); }
+
+.btn-ghost {
+  border: 1px solid var(--border-lit);
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 12px 20px;
+  border-radius: var(--r-md);
+  transition: all 0.15s;
+  text-align: center;
+}
+.btn-ghost:active { transform: scale(0.98); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.full { width: 100%; display: block; }
+
+/* Divider */
+.divider { display: flex; align-items: center; gap: 12px; color: var(--text-dim); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ==================== BOTTOM NAV ==================== */
+#bottomnav {
+  height: calc(var(--botnav-h) + var(--safe-bottom));
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-shrink: 0;
+  z-index: 10;
+}
+#bottomnav.hidden { display: none; }
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; color: var(--text-dim); padding-bottom: var(--safe-bottom);
+  transition: color 0.15s;
+}
+.tab-btn.active { color: var(--accent); }
+.tab-icon { font-size: 20px; line-height: 1; }
+.tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+
+/* ==================== FIND / MATCHMAKING ==================== */
+.find-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #161c26, #1a2235);
+  border-color: var(--border-lit);
+}
+.find-pulse {
+  position: absolute; top: -40px; right: -40px;
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(232,163,40,0.15) 0%, transparent 70%);
+  animation: pulse-grow 2s ease-in-out infinite;
+}
+@keyframes pulse-grow { 0%,100%{transform:scale(1);opacity:1;} 50%{transform:scale(1.4);opacity:0.5;} }
+.find-content { position: relative; display: flex; align-items: center; justify-content: space-between; }
+.find-label { font-family: 'Archivo Black', sans-serif; font-size: 11px; letter-spacing: 0.12em; color: var(--text-muted); text-transform: uppercase; }
+.find-btn { padding: 12px 24px; font-size: 14px; }
+.find-status { font-size: 13px; color: var(--text-muted); margin-top: 10px; text-align: center; }
+
+/* Filter panel */
+.filter-panel { margin-bottom: 12px; }
+.filter-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font-weight: 600; font-size: 14px;
+  list-style: none;
+}
+.filter-summary::-webkit-details-marker { display: none; }
+.filter-badge { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; font-size: 11px; padding: 2px 10px; font-weight: 600; }
+.filter-content { background: var(--bg-card); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--r-md) var(--r-md); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.filter-group { display: flex; flex-direction: column; gap: 8px; }
+.filter-group label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+
+/* Challenge cards */
+.challenge-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.challenge-card:active { transform: scale(0.99); border-color: var(--border-lit); }
+.ch-card-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.ch-card-name { font-family: 'Archivo Black', sans-serif; font-size: 16px; }
+.ch-card-date { font-size: 11px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+.ch-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ch-tag {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 3px 10px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+}
+.ch-tag.dist { color: var(--accent); border-color: rgba(232,163,40,0.3); }
+.ch-card-msg { font-size: 13px; color: var(--text-muted); font-style: italic; }
+.ch-card-action { display: flex; justify-content: flex-end; }
+.btn-join { background: var(--accent); color: #0d1117; font-family: 'Archivo Black', sans-serif; font-size: 13px; padding: 8px 20px; border-radius: 8px; }
+
+/* ==================== MATCH TYPE GRID ==================== */
+.match-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.match-type-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 10px;
+  transition: all 0.15s;
+}
+.match-type-btn.active { border-color: var(--accent); background: var(--accent-glow); }
+.mt-icon { font-size: 22px; }
+.mt-label { font-family: 'Archivo Black', sans-serif; font-size: 13px; }
+.mt-desc { font-size: 11px; color: var(--text-muted); }
+
+/* Arrows stepper */
+.arrows-stepper { display: flex; align-items: center; justify-content: center; gap: 24px; margin-top: 4px; }
+.arrows-stepper button { width: 40px; height: 40px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 50%; font-size: 22px; color: var(--text); display: flex; align-items: center; justify-content: center; }
+#arrows-count { font-family: 'Archivo Black', sans-serif; font-size: 28px; color: var(--accent); min-width: 48px; text-align: center; }
+
+.rules-box { background: var(--bg-raised); border-radius: var(--r-sm); padding: 12px 14px; font-size: 13px; color: var(--text-muted); line-height: 1.8; }
+
+.scoring-opts { }
+
+/* My Challenges */
+.my-ch-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 16px; margin-bottom: 10px;
+}
+.my-ch-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.my-ch-title { font-family: 'Archivo Black', sans-serif; font-size: 15px; }
+.my-ch-type { font-size: 11px; color: var(--text-muted); background: var(--bg-raised); padding: 3px 8px; border-radius: 999px; font-family: 'DM Mono', monospace; }
+.my-ch-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-sm { padding: 8px 14px; font-size: 12px; border-radius: 8px; font-weight: 600; }
+.btn-danger { background: rgba(242, 96, 96, 0.15); border: 1px solid rgba(242,96,96,0.3); color: var(--red); }
+.btn-copy { background: var(--bg-raised); border: 1px solid var(--border); color: var(--text-muted); }
+
+/* ==================== SCORE INPUT (CHALLENGE SCENE) ==================== */
+#scene-challenge .scene-scroll { padding: 0; }
+
+.match-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+}
+.match-player { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
+.player-avatar { width: 44px; height: 44px; background: var(--bg-raised); border: 2px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.match-player.me .player-avatar { border-color: var(--accent); }
+.player-name { font-size: 12px; font-weight: 600; text-align: center; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-vs { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.match-vs span { font-family: 'Archivo Black', sans-serif; font-size: 18px; color: var(--text-dim); }
+.match-dist { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--accent); background: var(--accent-glow); padding: 3px 8px; border-radius: 999px; }
+
+.score-board { padding: 16px; flex: 1; overflow-y: auto; }
+
+/* Total score */
+.total-sum-display { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-bottom: 20px; padding: 16px; background: var(--bg-card); border-radius: var(--r-md); border: 1px solid var(--border); }
+.sum-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+.sum-value { font-family: 'Archivo Black', sans-serif; font-size: 48px; color: var(--accent); line-height: 1; }
+
+.arrow-rows { display: flex; flex-direction: column; gap: 10px; }
+.arrow-row { display: flex; align-items: center; gap: 8px; }
+.arrow-row-num { font-size: 11px; color: var(--text-dim); width: 20px; text-align: right; font-family: 'DM Mono', monospace; }
+.arrow-inputs { display: flex; gap: 8px; flex: 1; }
+.arrow-cell {
+  flex: 1; height: 48px;
+  background: var(--bg-raised);
+  border: 2px solid var(--border);
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Archivo Black', sans-serif; font-size: 18px;
+  color: var(--text);
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+.arrow-cell.active { border-color: var(--accent); background: var(--accent-glow); }
+.arrow-cell.filled-10 { color: var(--score-10); border-color: rgba(232,163,40,0.4); }
+.arrow-cell.filled-9 { color: var(--score-9); border-color: rgba(232,200,40,0.3); }
+.arrow-cell.filled-8 { color: var(--score-8); border-color: rgba(62,207,142,0.3); }
+.arrow-cell.filled { color: var(--text); }
+.row-sum { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--accent); width: 28px; text-align: right; }
+
+/* Set system */
+.set-scoreboard { display: flex; align-items: center; justify-content: center; gap: 20px; padding: 16px; background: var(--bg-card); border-radius: var(--r-md); border: 1px solid var(--border); margin-bottom: 12px; }
+.set-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.set-player-name { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.set-score { font-family: 'Archivo Black', sans-serif; font-size: 40px; line-height: 1; color: var(--accent); }
+.set-divider { font-family: 'Archivo Black', sans-serif; font-size: 32px; color: var(--text-dim); }
+.set-progress { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 12px; font-family: 'DM Mono', monospace; }
+.set-arrow-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.set-arrow-row .arrow-cell { height: 56px; font-size: 20px; }
+
+/* Numpad */
+.numpad {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  position: sticky; bottom: 0;
+}
+.numpad-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.numpad-row:last-child { margin-bottom: 0; }
+.num-btn {
+  flex: 1; height: 52px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 18px; color: var(--text);
+  transition: all 0.1s;
+  display: flex; align-items: center; justify-content: center;
+}
+.num-btn:active { background: var(--accent); color: #0d1117; transform: scale(0.96); }
+.del-btn { background: rgba(242,96,96,0.12); border-color: rgba(242,96,96,0.2); color: var(--red); font-size: 14px; }
+.del-btn:active { background: var(--red); color: white; }
+
+/* Match complete overlay */
+.match-complete {
+  position: absolute; inset: 0;
+  background: rgba(13, 17, 23, 0.92);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+}
+.match-complete.hidden { display: none; }
+.complete-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-lit);
+  border-radius: var(--r-xl);
+  padding: 32px 24px;
+  text-align: center;
+  width: 100%;
+  max-width: 360px;
+  animation: slide-up 0.3s ease-out;
+}
+@keyframes slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.complete-icon { font-size: 56px; margin-bottom: 12px; }
+.complete-title { font-family: 'Archivo Black', sans-serif; font-size: 24px; margin-bottom: 12px; }
+.complete-result { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+.complete-actions { display: flex; gap: 10px; justify-content: center; }
+.complete-actions .btn-primary { flex: 1; }
+.complete-actions .btn-secondary { flex: 1; }
+
+/* ==================== HISTORY ==================== */
+.stats-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.stat-box { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px 10px; text-align: center; }
+.stat-val { display: block; font-family: 'Archivo Black', sans-serif; font-size: 24px; color: var(--accent); }
+.stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+
+.achievements-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.achievement-badge {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 10px 14px; min-width: 72px;
+}
+.achievement-badge.earned { border-color: var(--accent); background: var(--accent-glow); }
+.badge-icon { font-size: 22px; }
+.badge-label { font-size: 10px; text-align: center; color: var(--text-muted); line-height: 1.3; }
+.achievement-badge.earned .badge-label { color: var(--accent); }
+
+.history-item {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 14px 16px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 14px;
+}
+.hi-result { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.hi-result.win { background: rgba(62,207,142,0.15); }
+.hi-result.loss { background: rgba(242,96,96,0.15); }
+.hi-result.draw { background: rgba(122,143,168,0.15); }
+.hi-info { flex: 1; }
+.hi-opp { font-weight: 600; font-size: 14px; }
+.hi-meta { font-size: 12px; color: var(--text-muted); }
+.hi-score { font-family: 'Archivo Black', sans-serif; font-size: 18px; text-align: right; }
+.hi-score.win { color: var(--green); }
+.hi-score.loss { color: var(--red); }
+
+/* ==================== UTILITY ==================== */
+.hidden { display: none !important; }
+.text-sm { font-size: 13px; }
+.text-xs { font-size: 11px; }
+.muted { color: var(--text-muted); }
+.mono { font-family: 'DM Mono', monospace; }
+
+.user-id-display { text-align: center; padding: 8px 0; }
+
+/* ==================== TOAST ==================== */
+#toast-container { position: fixed; bottom: calc(var(--botnav-h) + 16px + var(--safe-bottom)); left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: none; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; width: 90%; max-width: 380px; }
+.toast {
+  background: var(--bg-raised); border: 1px solid var(--border-lit);
+  border-radius: var(--r-md); padding: 12px 16px;
+  font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  animation: toast-in 0.25s ease-out;
+  pointer-events: all;
+  width: 100%; text-align: center;
+}
+.toast.success { border-color: rgba(62,207,142,0.5); color: var(--green); }
+.toast.error { border-color: rgba(242,96,96,0.5); color: var(--red); }
+.toast.info { border-color: rgba(232,163,40,0.4); color: var(--accent); }
+@keyframes toast-in { from{transform:translateY(12px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+
+/* Loading spinner */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+.empty-text { font-size: 14px; }
+
+/* ==================== LIVE OPPONENT DISPLAY ==================== */
+.opp-live-indicator {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-lit);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: center;
+}
+.opp-live-indicator.active { color: var(--accent); border-color: rgba(232,163,40,0.4); }
+
+.opp-set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}
+.opp-row-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; width: 28px; flex-shrink: 0; }
+.opp-set-row .arrow-cell { height: 40px; font-size: 15px; background: var(--bg-card); }
+
+/* Resume tab pulse when match is active */
+#resume-tab:not(.hidden) .tab-icon {
+  display: inline-block;
+  animation: resume-pulse 1.5s ease-in-out infinite;
+}
+@keyframes resume-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.25); }
+}
+
+/* ==================== MATCH STATUS BAR ==================== */
+.match-status-bar {
+  background: rgba(232,163,40,0.12);
+  border: 1px solid rgba(232,163,40,0.3);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--accent);
+  margin-bottom: 12px;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(232,163,40,0.3); }
+  50%       { border-color: rgba(232,163,40,0.7); }
+}
+
+</style>
+</head>
+<body>
+  <div id="app">
+    <!-- Toast notifications -->
+    <div id="toast-container"></div>
+
+    <!-- Top navigation bar -->
+    <nav id="topnav" class="hidden">
+      <div class="nav-left">
+        <button id="back-btn" class="nav-btn hidden" onclick="goBack()">←</button>
+        <span id="nav-logo" class="logo-sm">⬡ ARROWMATCH</span>
+      </div>
+      <div class="nav-center">
+        <span id="nav-title"></span>
+      </div>
+      <div class="nav-right">
+        <button class="nav-btn" onclick="showScene('settings')">⚙</button>
+      </div>
+    </nav>
+
+    <!-- Bottom tab bar -->
+    <nav id="bottomnav" class="hidden">
+      <button class="tab-btn active" data-scene="list-challenge" onclick="showScene('list-challenge')">
+        <span class="tab-icon">◎</span>
+        <span class="tab-label">Challenges</span>
+      </button>
+      <button class="tab-btn" data-scene="new-challenge" onclick="showScene('new-challenge')">
+        <span class="tab-icon">+</span>
+        <span class="tab-label">New</span>
+      </button>
+      <button class="tab-btn hidden" id="resume-tab" data-scene="challenge" onclick="showScene('challenge')">
+        <span class="tab-icon">🏹</span>
+        <span class="tab-label">Match</span>
+      </button>
+      <button class="tab-btn" data-scene="my-challenges" onclick="showScene('my-challenges')">
+        <span class="tab-icon">◈</span>
+        <span class="tab-label">Mine</span>
+      </button>
+      <button class="tab-btn" data-scene="history" onclick="showScene('history')">
+        <span class="tab-icon">◷</span>
+        <span class="tab-label">History</span>
+      </button>
+    </nav>
+
+    <!-- SCENE: Entry / Login -->
+    <div id="scene-entry" class="scene active">
+      <div class="entry-bg">
+        <div class="entry-target"></div>
+        <div class="entry-target t2"></div>
+        <div class="entry-target t3"></div>
+      </div>
+      <div class="entry-content">
+        <div class="entry-logo">
+          <div class="logo-hex">⬡</div>
+          <h1 class="logo-text">ARROWMATCH</h1>
+          <p class="logo-tagline">Global Archery Challenges</p>
+        </div>
+        <div class="entry-form" id="entry-form-login">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="login-email" placeholder="archer@example.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <button class="btn-primary full" onclick="handleLogin()">Sign In</button>
+          <div class="divider"><span>or</span></div>
+          <button class="btn-ghost full" onclick="handleGuest()">Continue as Guest</button>
+          <p class="entry-hint">New here? <a href="#" onclick="toggleRegister()">Create account</a></p>
+        </div>
+        <div class="entry-form hidden" id="entry-form-register">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="reg-email" placeholder="archer@example.com" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="reg-password" placeholder="••••••••" />
+          </div>
+          <button class="btn-primary full" onclick="handleRegister()">Create Account</button>
+          <div class="divider"><span>or</span></div>
+          <button class="btn-ghost full" onclick="handleGuest()">Continue as Guest</button>
+          <p class="entry-hint">Have an account? <a href="#" onclick="toggleRegister()">Sign in</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE: Settings -->
+    <div id="scene-settings" class="scene">
+      <div class="scene-scroll">
+        <div class="scene-header">
+          <h2>Your Profile</h2>
+          <p class="scene-subtitle">Tell opponents who they're up against</p>
+        </div>
+
+        <div class="card">
+          <div class="form-group">
+            <label>Name / Nickname <span class="req">*</span></label>
+            <input type="text" id="s-name" placeholder="e.g. SteadyHand42" maxlength="32" />
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>Gender <span class="req">*</span></label>
+              <div class="radio-group">
+                <label class="radio-opt"><input type="radio" name="gender" value="Male" /><span>Male</span></label>
+                <label class="radio-opt"><input type="radio" name="gender" value="Female" /><span>Female</span></label>
+              </div>
+            </div>
+            <div class="form-group half">
+              <label>Age <span class="req">*</span></label>
+              <select id="s-age">
+                <option value="">Select</option>
+                <option value="Under 18">Under 18</option>
+                <option value="18–20">18–20</option>
+                <option value="21–49">21–49</option>
+                <option value="50+">50+</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Bow Type <span class="req">*</span></label>
+            <div class="chip-group" id="bow-type-chips">
+              <button class="chip" onclick="selectChip(this,'bow-type')">Recurve</button>
+              <button class="chip" onclick="selectChip(this,'bow-type')">Compound</button>
+              <button class="chip" onclick="selectChip(this,'bow-type')">Barebow</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Skill Level <span class="req">*</span></label>
+            <div class="chip-group" id="skill-level-chips">
+              <button class="chip" onclick="selectChip(this,'skill-level')">Beginner</button>
+              <button class="chip" onclick="selectChip(this,'skill-level')">Skilled</button>
+              <button class="chip" onclick="selectChip(this,'skill-level')">Master</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Country <span class="req">*</span></label>
+            <select id="s-country">
+              <option value="">Select country</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Account</h3>
+          <div id="account-section-guest">
+            <p class="text-sm muted">You're using a guest account. Create an account to save your progress across devices.</p>
+            <div class="form-group mt-sm">
+              <label>Email</label>
+              <input type="email" id="acc-email" placeholder="archer@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="acc-password" placeholder="Min. 8 characters" />
+            </div>
+            <button class="btn-secondary full" onclick="handleCreateAccount()">Create Account</button>
+          </div>
+          <div id="account-section-user" class="hidden">
+            <p class="text-sm"><strong id="acc-display-email"></strong></p>
+            <p class="text-sm muted mt-xs">Registered account</p>
+            <button class="btn-ghost full mt-sm" onclick="handleLogout()">Sign Out</button>
+          </div>
+        </div>
+
+        <div class="user-id-display">
+          <span class="muted text-xs">User ID: </span>
+          <span class="mono text-xs" id="display-user-id">—</span>
+        </div>
+
+        <button class="btn-primary full mt-lg" onclick="saveSettings()">Save Profile</button>
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+    <!-- SCENE: List Challenges -->
+    <div id="scene-list-challenge" class="scene">
+      <div class="scene-scroll">
+        <div class="scene-header">
+          <h2>Open Challenges</h2>
+          <p class="scene-subtitle">Join a waiting archer</p>
+        </div>
+
+        <!-- Quick Find -->
+        <div class="card find-card">
+          <div class="find-pulse"></div>
+          <div class="find-content">
+            <p class="find-label">QUICK MATCH</p>
+            <button class="btn-primary find-btn" onclick="findOpponent()">Find Opponent</button>
+          </div>
+          <div class="find-status" id="find-status"></div>
+        </div>
+
+        <!-- Matchmaking Filters -->
+        <details class="filter-panel">
+          <summary class="filter-summary">
+            <span>Filters</span>
+            <span class="filter-badge" id="filter-badge">All</span>
+          </summary>
+          <div class="filter-content">
+            <div class="filter-group">
+              <label>Skill Level</label>
+              <div class="chip-group multi">
+                <button class="chip active" data-filter="skill" data-val="Beginner" onclick="toggleFilter(this)">Beginner</button>
+                <button class="chip active" data-filter="skill" data-val="Skilled" onclick="toggleFilter(this)">Skilled</button>
+                <button class="chip active" data-filter="skill" data-val="Master" onclick="toggleFilter(this)">Master</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <label>Gender</label>
+              <div class="chip-group multi">
+                <button class="chip active" data-filter="gender" data-val="Male" onclick="toggleFilter(this)">Male</button>
+                <button class="chip active" data-filter="gender" data-val="Female" onclick="toggleFilter(this)">Female</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <label>Bow Type</label>
+              <div class="chip-group multi">
+                <button class="chip active" data-filter="bow" data-val="Recurve" onclick="toggleFilter(this)">Recurve</button>
+                <button class="chip active" data-filter="bow" data-val="Compound" onclick="toggleFilter(this)">Compound</button>
+                <button class="chip active" data-filter="bow" data-val="Barebow" onclick="toggleFilter(this)">Barebow</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <label>Distance</label>
+              <div class="chip-group multi">
+                <button class="chip active" data-filter="dist" data-val="18m" onclick="toggleFilter(this)">18m</button>
+                <button class="chip active" data-filter="dist" data-val="25m" onclick="toggleFilter(this)">25m</button>
+                <button class="chip active" data-filter="dist" data-val="30m" onclick="toggleFilter(this)">30m</button>
+                <button class="chip active" data-filter="dist" data-val="50m" onclick="toggleFilter(this)">50m</button>
+                <button class="chip active" data-filter="dist" data-val="70m" onclick="toggleFilter(this)">70m</button>
+                <button class="chip active" data-filter="dist" data-val="90m" onclick="toggleFilter(this)">90m</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <label>Country</label>
+              <select id="filter-country">
+                <option value="">Any country</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <!-- Challenge list -->
+        <div id="challenge-list">
+          <!-- populated by JS -->
+        </div>
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+    <!-- SCENE: New Challenge -->
+    <div id="scene-new-challenge" class="scene">
+      <div class="scene-scroll">
+        <div class="scene-header">
+          <h2>New Challenge</h2>
+          <p class="scene-subtitle">Set up a match on your terms</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Match Type</h3>
+          <div class="match-type-grid">
+            <button class="match-type-btn active" data-type="live" onclick="selectMatchType(this)">
+              <span class="mt-icon">⚡</span>
+              <span class="mt-label">Live</span>
+              <span class="mt-desc">Real-time</span>
+            </button>
+            <button class="match-type-btn" data-type="async" onclick="selectMatchType(this)">
+              <span class="mt-icon">⏳</span>
+              <span class="mt-label">Async</span>
+              <span class="mt-desc">Your own pace</span>
+            </button>
+            <button class="match-type-btn" data-type="scheduled" onclick="selectMatchType(this)">
+              <span class="mt-icon">📅</span>
+              <span class="mt-label">Scheduled</span>
+              <span class="mt-desc">Set deadline</span>
+            </button>
+            <button class="match-type-btn" data-type="private" onclick="selectMatchType(this)">
+              <span class="mt-icon">🔒</span>
+              <span class="mt-label">Private</span>
+              <span class="mt-desc">Link only</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Distance</h3>
+          <div class="chip-group" id="dist-chips">
+            <button class="chip" onclick="selectChip(this,'dist')">18m</button>
+            <button class="chip" onclick="selectChip(this,'dist')">25m</button>
+            <button class="chip active" onclick="selectChip(this,'dist')">30m</button>
+            <button class="chip" onclick="selectChip(this,'dist')">50m</button>
+            <button class="chip" onclick="selectChip(this,'dist')">70m</button>
+            <button class="chip" onclick="selectChip(this,'dist')">90m</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Scoring</h3>
+          <div class="toggle-row">
+            <button class="toggle-btn active" data-scoring="total" onclick="selectScoring(this)">Total Score</button>
+            <button class="toggle-btn" data-scoring="sets" onclick="selectScoring(this)">Set System</button>
+          </div>
+          <div id="scoring-total-opts" class="scoring-opts mt-sm">
+            <div class="form-group">
+              <label>Number of Arrows</label>
+              <div class="arrows-stepper">
+                <button onclick="changeArrows(-3)">−</button>
+                <span id="arrows-count">18</span>
+                <button onclick="changeArrows(3)">+</button>
+              </div>
+            </div>
+          </div>
+          <div id="scoring-sets-opts" class="scoring-opts mt-sm hidden">
+            <div class="rules-box">
+              <p>3 arrows per set · 2pts win · 1pt tie</p>
+              <p>First to 6 points wins</p>
+              <p>Shoot-off on tie (1 arrow, nearest center)</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="deadline-card">
+          <h3 class="card-title">Deadline</h3>
+          <input type="datetime-local" id="challenge-deadline" class="full" />
+          <p class="text-xs muted mt-xs">Results must be submitted by 23:59:59 of selected date</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Invite Message <span class="opt">(optional)</span></h3>
+          <textarea id="invite-msg" placeholder="e.g. Recurve shooters only, looking for a close match!" rows="3" maxlength="200"></textarea>
+          <p class="char-count"><span id="msg-chars">0</span>/200</p>
+        </div>
+
+        <button class="btn-primary full" onclick="createChallenge()">Create Challenge</button>
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+    <!-- SCENE: My Challenges -->
+    <div id="scene-my-challenges" class="scene">
+      <div class="scene-scroll">
+        <div class="scene-header">
+          <h2>My Challenges</h2>
+          <p class="scene-subtitle">Manage your open challenges</p>
+        </div>
+        <div id="my-challenges-list">
+          <!-- populated by JS -->
+        </div>
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+    <!-- SCENE: Challenge (Score Input) -->
+    <div id="scene-challenge" class="scene">
+      <div class="scene-scroll">
+        <!-- Match header -->
+        <div class="match-header">
+          <div class="match-player me">
+            <div class="player-avatar" id="ch-my-avatar">⬡</div>
+            <div class="player-name" id="ch-my-name">You</div>
+          </div>
+          <div class="match-vs">
+            <span>VS</span>
+            <div class="match-dist" id="ch-dist">30m</div>
+          </div>
+          <div class="match-player opp">
+            <div class="player-avatar" id="ch-opp-avatar">⬡</div>
+            <div class="player-name" id="ch-opp-name">Opponent</div>
+          </div>
+        </div>
+
+        <!-- Score display -->
+        <div class="score-board" id="score-board">
+          <!-- Total Score mode -->
+          <div id="total-score-ui">
+            <div class="total-sum-display">
+              <span class="sum-label">Total</span>
+              <span class="sum-value" id="total-sum">0</span>
+            </div>
+            <div id="arrow-rows" class="arrow-rows">
+              <!-- rows injected by JS -->
+            </div>
+            <div id="opp-live-indicator" class="opp-live-indicator hidden"></div>
+          </div>
+          <!-- Set System mode -->
+          <div id="set-score-ui" class="hidden">
+            <div class="set-scoreboard">
+              <div class="set-col">
+                <div class="set-player-name" id="set-my-name">You</div>
+                <div class="set-score" id="set-my-score">0</div>
+              </div>
+              <div class="set-divider">:</div>
+              <div class="set-col">
+                <div class="set-player-name" id="set-opp-name">Opp</div>
+                <div class="set-score" id="set-opp-score">0</div>
+              </div>
+            </div>
+            <div class="set-progress" id="set-progress">Set 1 of ∞</div>
+            <div class="set-arrow-row" id="set-arrow-row">
+              <!-- 3 inputs injected by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Numpad -->
+        <div class="numpad" id="numpad">
+          <div class="numpad-row">
+            <button class="num-btn" onclick="numInput(10)">10</button>
+            <button class="num-btn" onclick="numInput(9)">9</button>
+            <button class="num-btn" onclick="numInput(8)">8</button>
+            <button class="num-btn" onclick="numInput(7)">7</button>
+          </div>
+          <div class="numpad-row">
+            <button class="num-btn" onclick="numInput(6)">6</button>
+            <button class="num-btn" onclick="numInput(5)">5</button>
+            <button class="num-btn" onclick="numInput(4)">4</button>
+            <button class="num-btn" onclick="numInput(3)">3</button>
+          </div>
+          <div class="numpad-row">
+            <button class="num-btn" onclick="numInput(2)">2</button>
+            <button class="num-btn" onclick="numInput(1)">1</button>
+            <button class="num-btn" onclick="numInput(0)">0</button>
+            <button class="num-btn del-btn" onclick="numDel()">DEL</button>
+          </div>
+        </div>
+
+        <!-- Match complete overlay -->
+        <div id="match-complete" class="match-complete hidden">
+          <div class="complete-card">
+            <div class="complete-icon" id="complete-icon">🏆</div>
+            <h2 class="complete-title" id="complete-title">Match Complete</h2>
+            <div class="complete-result" id="complete-result"></div>
+            <div class="complete-actions">
+              <button class="btn-primary" onclick="startRematch()">Rematch</button>
+              <button class="btn-secondary" onclick="showScene('new-challenge')">New Challenge</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+    <!-- SCENE: History -->
+    <div id="scene-history" class="scene">
+      <div class="scene-scroll">
+        <div class="scene-header">
+          <h2>Match History</h2>
+          <p class="scene-subtitle">Your past battles</p>
+        </div>
+        <!-- Stats summary -->
+        <div class="stats-row">
+          <div class="stat-box">
+            <span class="stat-val" id="stat-avg">—</span>
+            <span class="stat-lbl">Avg Score</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-val" id="stat-wins">—</span>
+            <span class="stat-lbl">Wins</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-val" id="stat-rank">—</span>
+            <span class="stat-lbl">Global Rank</span>
+          </div>
+        </div>
+        <!-- Achievements -->
+        <div class="card">
+          <h3 class="card-title">Achievements</h3>
+          <div class="achievements-grid" id="achievements-grid">
+            <!-- injected by JS -->
+          </div>
+        </div>
+        <!-- History list -->
+        <div id="history-list">
+          <!-- injected by JS -->
+        </div>
+        <div class="pb-safe"></div>
+      </div>
+    </div>
+
+  </div><!-- #app -->
+
+  <script>
+// =============================================
+// ARROWMATCH — Archery Challenge Platform
+// Frontend Application Logic
+// All API calls go through the api() helper.
+// =============================================
+
+// ==================== CONFIG ====================
+const API_BASE = '';   // same-origin: backend serves index.html at /
+// WS_BASE auto-derives from the current page URL so it always points to the same
+// host/port as the page (works for localhost, staging, and production without config).
+const WS_BASE = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
+
+// ==================== STATE ====================
+const STATE = {
+  userId: null,
+  accessToken: null,
+  refreshToken: null,
+  user: null,           // { email, isGuest }
+  profile: null,        // { name, gender, age, bowType, skillLevel, country }
+  currentScene: 'entry',
+  activeChallengeId: null,
+  currentMatchType: 'live',
+  currentScoring: 'total',
+  arrowCount: 18,
+  matchState: null,
+  challenges: [],
+  myChallenges: [],
+  history: [],
+  filters: {
+    skill: ['Beginner', 'Skilled', 'Master'],
+    gender: ['Male', 'Female'],
+    bow: ['Recurve', 'Compound', 'Barebow'],
+    dist: ['18m', '25m', '30m', '50m', '70m', '90m'],
+    country: ''
+  }
+};
+
+// Score input globals
+let activeArrowIndex = 0;
+let arrowValues = [];
+let findingTimer = null;
+let matchSocket = null;    // WebSocket for live match
+let mmSocket = null;       // WebSocket for matchmaking
+
+// ==================== API LAYER ====================
+
+/**
+ * Central API helper.
+ * Handles auth headers, token refresh on 401, and JSON parsing.
+ * Falls back to localStorage cache on network error.
+ */
+async function api(method, path, body = null, { skipAuth = false } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (!skipAuth && STATE.accessToken) {
+    headers['Authorization'] = `Bearer ${STATE.accessToken}`;
+  }
+
+  let resp;
+  try {
+    resp = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : null,
+    });
+  } catch (err) {
+    // Network offline — return null, callers fall back to local state
+    console.warn('API offline:', path, err.message);
+    return null;
+  }
+
+  // 401 → attempt token refresh once
+  if (resp.status === 401 && STATE.refreshToken && !skipAuth) {
+    const refreshed = await _tryRefresh();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${STATE.accessToken}`;
+      resp = await fetch(`${API_BASE}${path}`, {
+        method, headers, body: body ? JSON.stringify(body) : null,
+      });
+    } else {
+      _clearSession();
+      showScene('entry');
+      showToast('Session expired. Please sign in again.', 'error');
+      return null;
+    }
+  }
+
+  if (!resp.ok) {
+    let detail = `HTTP ${resp.status}`;
+    try { detail = (await resp.json()).detail || detail; } catch {}
+    throw new ApiError(detail, resp.status);
+  }
+
+  if (resp.status === 204) return null;
+  return resp.json();
+}
+
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function _tryRefresh() {
+  try {
+    const data = await api('POST', '/api/auth/refresh',
+      { refresh_token: STATE.refreshToken }, { skipAuth: true });
+    if (data) {
+      _storeTokens(data.access_token, data.refresh_token);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function _storeTokens(access, refresh) {
+  STATE.accessToken = access;
+  STATE.refreshToken = refresh;
+  localStorage.setItem('arrowmatch_access_token', access);
+  if (refresh) localStorage.setItem('arrowmatch_refresh_token', refresh);
+}
+
+function _clearSession() {
+  STATE.userId = null;
+  STATE.accessToken = null;
+  STATE.refreshToken = null;
+  STATE.user = null;
+  STATE.profile = null;
+  localStorage.removeItem('arrowmatch_access_token');
+  localStorage.removeItem('arrowmatch_refresh_token');
+  localStorage.removeItem('arrowmatch_userid');
+  localStorage.removeItem('arrowmatch_user');
+}
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', init);
+
+function init() {
+  loadCountries();
+  restoreSession();
+  setupInviteMessageCounter();
+}
+
+async function restoreSession() {
+  const savedUserId     = localStorage.getItem('arrowmatch_userid');
+  const savedAccess     = localStorage.getItem('arrowmatch_access_token');
+  const savedRefresh    = localStorage.getItem('arrowmatch_refresh_token');
+  const savedUser       = localStorage.getItem('arrowmatch_user');
+  const savedProfile    = localStorage.getItem('arrowmatch_profile');
+  const savedMyCh       = localStorage.getItem('arrowmatch_my_challenges');
+  const savedHistory    = localStorage.getItem('arrowmatch_history');
+  const savedMatchState = localStorage.getItem('arrowmatch_match_state');
+
+  if (savedMyCh)    STATE.myChallenges = JSON.parse(savedMyCh);
+  if (savedHistory) STATE.history      = JSON.parse(savedHistory);
+
+  // Check for challenge link
+  const urlParams     = new URLSearchParams(window.location.search);
+  const challengeCode = urlParams.get('c');
+
+  if (savedUserId && savedAccess) {
+    STATE.userId      = savedUserId;
+    STATE.accessToken = savedAccess;
+    STATE.refreshToken = savedRefresh || null;
+    if (savedUser)    STATE.user    = JSON.parse(savedUser);
+    if (savedProfile) STATE.profile = JSON.parse(savedProfile);
+
+    // Verify token is still valid by fetching profile from server
+    try {
+      const serverProfile = await api('GET', '/api/profile');
+      if (serverProfile) {
+        STATE.profile = _serverProfileToLocal(serverProfile);
+        localStorage.setItem('arrowmatch_profile', JSON.stringify(STATE.profile));
+      }
+    } catch (e) {
+      if (e.status === 401) { _clearSession(); showScene('entry'); return; }
+      // Other error (network) — continue with cached profile
+    }
+
+    showUI();
+
+    if (challengeCode) {
+      handleChallengeLink(challengeCode);
+    } else if (savedMatchState) {
+      STATE.matchState = JSON.parse(savedMatchState);
+      showScene('challenge');
+      restoreMatch();
+      showToast('Match restored from previous session', 'info');
+    } else {
+      showScene('list-challenge');
+    }
+  } else {
+    showScene('entry');
+  }
+}
+
+function showUI() {
+  document.getElementById('topnav').classList.remove('hidden');
+  document.getElementById('bottomnav').classList.remove('hidden');
+  updateNavTitle();
+}
+
+// ==================== AUTH ====================
+
+async function handleGuest() {
+  try {
+    const data = await api('POST', '/api/guest', null, { skipAuth: true });
+    if (data) {
+      STATE.userId = data.user_id;
+      STATE.user   = { isGuest: true, email: null };
+      _storeTokens(data.access_token, data.refresh_token);
+      localStorage.setItem('arrowmatch_userid', data.user_id);
+      localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
+    } else {
+      // Offline fallback
+      STATE.userId = _generateLocalId();
+      STATE.user   = { isGuest: true, email: null };
+      localStorage.setItem('arrowmatch_userid', STATE.userId);
+      localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
+    }
+    showUI();
+    showScene('settings');
+    showToast('Welcome! Please fill in your profile.', 'info');
+  } catch (e) {
+    showToast(e.message || 'Could not connect. Try again.', 'error');
+  }
+}
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  if (!email || !pass) { showToast('Enter email and password', 'error'); return; }
+  if (!validateEmail(email)) { showToast('Invalid email', 'error'); return; }
+
+  try {
+    const data = await api('POST', '/api/auth/login',
+      { email, password: pass }, { skipAuth: true });
+    STATE.userId = data.user_id;
+    STATE.user   = { isGuest: data.is_guest, email };
+    _storeTokens(data.access_token, data.refresh_token);
+    localStorage.setItem('arrowmatch_userid', data.user_id);
+    localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
+
+    // Fetch profile from server
+    try {
+      const p = await api('GET', '/api/profile');
+      if (p) {
+        STATE.profile = _serverProfileToLocal(p);
+        localStorage.setItem('arrowmatch_profile', JSON.stringify(STATE.profile));
+      }
+    } catch {}
+
+    showUI();
+    showScene('list-challenge');
+    showToast('Welcome back!', 'success');
+  } catch (e) {
+    showToast(e.message || 'Login failed', 'error');
+  }
+}
+
+async function handleRegister() {
+  const email = document.getElementById('reg-email').value.trim();
+  const pass  = document.getElementById('reg-password').value;
+  if (!email || !pass) { showToast('Enter email and password', 'error'); return; }
+  if (!validateEmail(email)) { showToast('Invalid email', 'error'); return; }
+  if (pass.length < 8) { showToast('Password min 8 characters', 'error'); return; }
+
+  try {
+    const data = await api('POST', '/api/auth/register',
+      { email, password: pass, existing_user_id: STATE.userId || null },
+      { skipAuth: true });
+    STATE.userId = data.user_id;
+    STATE.user   = { isGuest: false, email };
+    _storeTokens(data.access_token, data.refresh_token);
+    localStorage.setItem('arrowmatch_userid', data.user_id);
+    localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
+    showUI();
+    showScene('settings');
+    showToast('Account created! Fill in your profile.', 'success');
+  } catch (e) {
+    showToast(e.message || 'Registration failed', 'error');
+  }
+}
+
+async function handleCreateAccount() {
+  const email = document.getElementById('acc-email').value.trim();
+  const pass  = document.getElementById('acc-password').value;
+  if (!email || !pass) { showToast('Enter email and password', 'error'); return; }
+  if (!validateEmail(email)) { showToast('Invalid email', 'error'); return; }
+  if (pass.length < 8) { showToast('Password min 8 chars', 'error'); return; }
+
+  try {
+    const data = await api('POST', '/api/auth/register',
+      { email, password: pass, existing_user_id: STATE.userId },
+      { skipAuth: true });
+    STATE.user = { isGuest: false, email };
+    _storeTokens(data.access_token, data.refresh_token);
+    localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
+    updateSettingsAccountSection();
+    showToast('Account linked!', 'success');
+  } catch (e) {
+    showToast(e.message || 'Failed to create account', 'error');
+  }
+}
+
+function handleLogout() {
+  _clearSession();
+  localStorage.clear();
+  location.reload();
+}
+
+function toggleRegister() {
+  document.getElementById('entry-form-login').classList.toggle('hidden');
+  document.getElementById('entry-form-register').classList.toggle('hidden');
+}
+
+// ==================== SCENE NAVIGATION ====================
+
+function showScene(name) {
+  // Show/hide the resume-match tab based on whether a live match is in progress
+  const resumeTab = document.getElementById('resume-tab');
+  if (resumeTab) {
+    const hasActiveMatch = STATE.matchState && !STATE.matchState.complete;
+    resumeTab.classList.toggle('hidden', !hasActiveMatch);
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.scene === name);
+  });
+  document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+  const scene = document.getElementById(`scene-${name}`);
+  if (!scene) return;
+  scene.classList.add('active');
+  STATE.currentScene = name;
+  updateNavTitle();
+
+  if (name === 'list-challenge')  refreshChallengeList();
+  if (name === 'my-challenges')   refreshMyChallenges();
+  if (name === 'history')         refreshHistory();
+  if (name === 'settings')        refreshSettings();
+  if (name === 'new-challenge')   updateDeadlineVisibility();
+
+  document.getElementById('back-btn').classList.toggle('hidden',
+    !['challenge'].includes(name));
+}
+
+function goBack() { showScene('list-challenge'); }
+
+function updateNavTitle() {
+  const titles = {
+    entry: '', settings: 'Settings',
+    'list-challenge': 'ArrowMatch', 'new-challenge': 'New Challenge',
+    'my-challenges': 'My Challenges', challenge: 'Match', history: 'History'
+  };
+  const el = document.getElementById('nav-title');
+  if (el) el.textContent = titles[STATE.currentScene] || '';
+  const isEntry = STATE.currentScene === 'entry';
+  document.getElementById('topnav').classList.toggle('hidden', isEntry);
+  document.getElementById('bottomnav').classList.toggle('hidden', isEntry);
+}
+
+// ==================== SETTINGS ====================
+
+function refreshSettings() {
+  if (!STATE.profile) return;
+  const p = STATE.profile;
+  if (p.name) document.getElementById('s-name').value = p.name;
+  if (p.gender) {
+    document.querySelectorAll('input[name="gender"]').forEach(r => {
+      r.checked = r.value === p.gender;
+    });
+  }
+  if (p.age) document.getElementById('s-age').value = p.age;
+  if (p.bowType) {
+    document.querySelectorAll('#bow-type-chips .chip').forEach(c => {
+      c.classList.toggle('active', c.textContent.trim() === p.bowType);
+    });
+  }
+  if (p.skillLevel) {
+    document.querySelectorAll('#skill-level-chips .chip').forEach(c => {
+      c.classList.toggle('active', c.textContent.trim() === p.skillLevel);
+    });
+  }
+  if (p.country) document.getElementById('s-country').value = p.country;
+  document.getElementById('display-user-id').textContent = STATE.userId || '—';
+  updateSettingsAccountSection();
+}
+
+function updateSettingsAccountSection() {
+  const isGuest = !STATE.user || STATE.user.isGuest;
+  document.getElementById('account-section-guest').classList.toggle('hidden', !isGuest);
+  document.getElementById('account-section-user').classList.toggle('hidden', isGuest);
+  if (!isGuest && STATE.user?.email) {
+    document.getElementById('acc-display-email').textContent = STATE.user.email;
+  }
+}
+
+async function saveSettings() {
+  const name      = document.getElementById('s-name').value.trim();
+  const genderEl  = document.querySelector('input[name="gender"]:checked');
+  const age       = document.getElementById('s-age').value;
+  const bowChip   = document.querySelector('#bow-type-chips .chip.active');
+  const skillChip = document.querySelector('#skill-level-chips .chip.active');
+  const country   = document.getElementById('s-country').value;
+
+  if (!name)      { showToast('Name is required', 'error'); return; }
+  if (!genderEl)  { showToast('Select gender', 'error'); return; }
+  if (!age)       { showToast('Select age range', 'error'); return; }
+  if (!bowChip)   { showToast('Select bow type', 'error'); return; }
+  if (!skillChip) { showToast('Select skill level', 'error'); return; }
+  if (!country)   { showToast('Select country', 'error'); return; }
+
+  const profile = {
+    name,
+    gender: genderEl.value,
+    age,
+    bowType: bowChip.textContent.trim(),
+    skillLevel: skillChip.textContent.trim(),
+    country,
+  };
+
+  // Save locally immediately (offline-safe)
+  STATE.profile = profile;
+  localStorage.setItem('arrowmatch_profile', JSON.stringify(profile));
+
+  // Sync to server
+  try {
+    await api('PUT', '/api/profile', {
+      name:        profile.name,
+      gender:      profile.gender,
+      age:         profile.age,
+      bow_type:    profile.bowType,
+      skill_level: profile.skillLevel,
+      country:     profile.country,
+    });
+    showToast('Profile saved!', 'success');
+  } catch (e) {
+    showToast('Saved locally (offline — will sync later)', 'info');
+  }
+
+  showScene('list-challenge');
+}
+
+// ==================== CHALLENGE LIST ====================
+
+async function refreshChallengeList() {
+  const container = document.getElementById('challenge-list');
+  container.innerHTML = `<div class="empty-state"><span class="spinner"></span></div>`;
+
+  try {
+    const f = STATE.filters;
+    const params = new URLSearchParams();
+    f.skill.forEach(v => params.append('skill', v));
+    f.gender.forEach(v => params.append('gender', v));
+    f.bow.forEach(v => params.append('bow', v));
+    f.dist.forEach(v => params.append('dist', v));
+    if (f.country) params.set('country', f.country);
+
+    const data = await api('GET', `/api/challenges?${params}`);
+    if (data) {
+      STATE.challenges = data;
+      renderChallengeList();
+      return;
+    }
+  } catch (e) {
+    console.warn('Could not load challenges from server:', e.message);
+  }
+
+  // Offline: show cached or mock
+  if (STATE.challenges.length === 0) STATE.challenges = generateMockChallenges();
+  renderChallengeList();
+}
+
+function renderChallengeList() {
+  const container = document.getElementById('challenge-list');
+  const list = STATE.challenges;
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><p class="empty-text">No open challenges match your filters</p></div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(c => {
+    // Support both server shape (creator_name etc.) and mock shape (name etc.)
+    const name       = c.creator_name || c.name || 'Archer';
+    const gender     = c.creator_gender || c.gender || '—';
+    const age        = c.creator_age || c.age || '—';
+    const bow        = c.creator_bow_type || c.bowType || '—';
+    const skill      = c.creator_skill_level || c.skillLevel || '—';
+    const dist       = c.distance || '—';
+    const msg        = c.invite_message || c.msg || '';
+    const date       = new Date(c.created_at || c.createdAt);
+    return `
+    <div class="challenge-card" onclick="joinChallenge('${c.id}')">
+      <div class="ch-card-top">
+        <span class="ch-card-name">${escHtml(name)}</span>
+        <span class="ch-card-date">${getTimeAgo(date)}</span>
+      </div>
+      <div class="ch-card-tags">
+        <span class="ch-tag dist">${dist}</span>
+        <span class="ch-tag">${bow}</span>
+        <span class="ch-tag">${skill}</span>
+        <span class="ch-tag">${gender}</span>
+        <span class="ch-tag">${age}</span>
+      </div>
+      ${msg ? `<div class="ch-card-msg">"${escHtml(msg)}"</div>` : ''}
+      <div class="ch-card-action">
+        <button class="btn-join" onclick="event.stopPropagation(); joinChallenge('${c.id}')">Join</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function joinChallenge(id) {
+  if (!STATE.profile) { showToast('Complete your profile first', 'error'); showScene('settings'); return; }
+
+  try {
+    const data = await api('POST', `/api/challenges/${id}/join`);
+    if (data?.match_id) {
+      // Find challenge for metadata
+      const ch = STATE.challenges.find(c => c.id === id) || {};
+      startMatch({
+        ...ch,
+        matchId: data.match_id,
+        name: ch.creator_name || ch.name || 'Opponent',
+      });
+      return;
+    }
+  } catch (e) {
+    if (e.status !== 404) { showToast(e.message || 'Could not join', 'error'); return; }
+  }
+
+  // Offline/mock fallback
+  const ch = STATE.challenges.find(c => c.id === id) || generateMockOpponent(id);
+  startMatch(ch);
+}
+
+// ==================== FIND OPPONENT ====================
+
+function findOpponent() {
+  if (!STATE.profile) { showToast('Complete your profile first', 'error'); showScene('settings'); return; }
+
+  const statusEl = document.getElementById('find-status');
+  const btn = document.querySelector('.find-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+
+  // Try WebSocket matchmaking first
+  _connectMatchmaking(statusEl, btn);
+}
+
+function _connectMatchmaking(statusEl, btn) {
+  if (mmSocket) { mmSocket.close(); mmSocket = null; }
+
+  try {
+    mmSocket = new WebSocket(`${WS_BASE}/ws/matchmaking?token=${STATE.accessToken || ''}`);
+
+    mmSocket.onopen = () => {
+      statusEl.innerHTML = `<span class="spinner"></span> Searching for opponent…`;
+      mmSocket.send(JSON.stringify({
+        type: 'find',
+        filters: STATE.filters,
+        profile: {
+          user_id:     STATE.userId,
+          name:        STATE.profile.name,
+          gender:      STATE.profile.gender,
+          age:         STATE.profile.age,
+          bow_type:    STATE.profile.bowType,
+          skill_level: STATE.profile.skillLevel,
+          country:     STATE.profile.country,
+        }
+      }));
+    };
+
+    mmSocket.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'status') {
+        statusEl.innerHTML = `<span class="spinner"></span> ${escHtml(msg.message)}`;
+      } else if (msg.type === 'matched') {
+        statusEl.textContent = '';
+        btn.disabled = false;
+        btn.textContent = 'Find Opponent';
+        mmSocket.close();
+        startMatch({
+          id: msg.match_id,
+          matchId: msg.match_id,
+          name: msg.opponent?.name || 'Opponent',
+          distance: STATE.profile.preferredDist || '30m',
+          scoring: 'total',
+          arrowCount: STATE.arrowCount,
+        });
+      }
+    };
+
+    mmSocket.onerror = () => {
+      // WS unavailable — fall back to polling / mock
+      _fallbackFindOpponent(statusEl, btn);
+    };
+
+    mmSocket.onclose = (e) => {
+      if (e.code !== 1000) _fallbackFindOpponent(statusEl, btn);
+    };
+
+  } catch {
+    _fallbackFindOpponent(statusEl, btn);
+  }
+}
+
+function _fallbackFindOpponent(statusEl, btn) {
+  const messages = [
+    'Connecting to matchmaking…',
+    'Scanning for opponents…',
+    'Applying filters…',
+    'Almost there…',
+    'Generating bot challenger…',
+  ];
+  let idx = 0;
+  statusEl.innerHTML = `<span class="spinner"></span> ${messages[0]}`;
+  const t = setInterval(() => {
+    idx++;
+    if (idx >= messages.length) {
+      clearInterval(t);
+      btn.disabled = false;
+      btn.textContent = 'Find Opponent';
+      statusEl.textContent = '';
+      startMatch(generateBotOpponent());
+    } else {
+      statusEl.innerHTML = `<span class="spinner"></span> ${messages[idx]}`;
+    }
+  }, 900);
+}
+
+// ── Bot score generation ──────────────────────────────────────────────────────
+const _BOT_SKILL = {
+  'Beginner':     { mean: 5,  dev: 2 },
+  'Intermediate': { mean: 7,  dev: 1.5 },
+  'Skilled':      { mean: 8,  dev: 1 },
+  'Advanced':     { mean: 9,  dev: 0.8 },
+  'Expert':       { mean: 9.5,dev: 0.5 },
+};
+
+function _genBotArrow(skill) {
+  const { mean, dev } = _BOT_SKILL[skill] || _BOT_SKILL['Skilled'];
+  const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);
+  return Math.max(0, Math.min(10, v));
+}
+function _genBotArrows(skill, count = 3) {
+  return Array.from({ length: count }, () => _genBotArrow(skill));
+}
+function _genBotTotal(myScore, skill) {
+  const { mean, dev } = _BOT_SKILL[skill] || _BOT_SKILL['Skilled'];
+  const ratio = mean / 10;
+  const base  = Math.round(myScore * ratio + (Math.random() * 2 - 1) * 5);
+  return Math.max(0, base);
+}
+
+function generateBotOpponent() {
+  const names = ['BotArcher_Theta', 'AutoNock_7', 'RoboRelease', 'CyberBow_X'];
+  return {
+    id: `bot-${Date.now()}`,
+    name: names[Math.floor(Math.random() * names.length)],
+    isBot: true,
+    distance: '30m',
+    scoring: 'total',
+    arrowCount: STATE.arrowCount,
+    type: 'live',
+  };
+}
+
+function generateMockOpponent(id) {
+  return { id, name: 'ArcherUnknown', distance: '30m', scoring: 'total', arrowCount: 18, type: 'async' };
+}
+
+function generateMockChallenges() {
+  const names  = ['SteadyHand42', 'ForestArcher', 'GoldenNock', 'QuietDraw', 'TitanBow'];
+  const bows   = ['Recurve', 'Compound', 'Barebow'];
+  const skills = ['Beginner', 'Skilled', 'Master'];
+  const ages   = ['18–20', '21–49', '50+'];
+  const dists  = ['18m', '30m', '50m', '70m'];
+  const msgs   = ['Looking for a friendly match!', 'Come test your skills!', '', 'Recurve archers welcome', ''];
+  return Array.from({ length: 6 }, (_, i) => ({
+    id: `mock-${i}`,
+    creator_name: names[i % names.length],
+    creator_gender: i % 2 === 0 ? 'Male' : 'Female',
+    creator_age: ages[i % 3],
+    creator_bow_type: bows[i % 3],
+    creator_skill_level: skills[i % 3],
+    distance: dists[i % 4],
+    invite_message: msgs[i % msgs.length],
+    type: i % 2 === 0 ? 'live' : 'async',
+    created_at: new Date(Date.now() - i * 180000).toISOString(),
+  }));
+}
+
+// ==================== NEW CHALLENGE ====================
+
+function selectMatchType(btn) {
+  document.querySelectorAll('.match-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  STATE.currentMatchType = btn.dataset.type;
+  updateDeadlineVisibility();
+}
+
+function selectScoring(btn) {
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  STATE.currentScoring = btn.dataset.scoring;
+  document.getElementById('scoring-total-opts').classList.toggle('hidden', STATE.currentScoring !== 'total');
+  document.getElementById('scoring-sets-opts').classList.toggle('hidden', STATE.currentScoring !== 'sets');
+}
+
+function changeArrows(delta) {
+  STATE.arrowCount = Math.max(3, Math.min(36, STATE.arrowCount + delta));
+  document.getElementById('arrows-count').textContent = STATE.arrowCount;
+}
+
+function updateDeadlineVisibility() {
+  // Private challenges don't require a deadline (link is the access control)
+  const show = ['async', 'scheduled'].includes(STATE.currentMatchType);
+  document.getElementById('deadline-card').classList.toggle('hidden', !show);
+}
+
+function setupInviteMessageCounter() {
+  const ta = document.getElementById('invite-msg');
+  if (!ta) return;
+  ta.addEventListener('input', () => {
+    document.getElementById('msg-chars').textContent = ta.value.length;
+  });
+}
+
+async function createChallenge() {
+  if (!STATE.profile) { showToast('Complete your profile first', 'error'); showScene('settings'); return; }
+
+  const distChip = document.querySelector('#dist-chips .chip.active');
+  if (!distChip) { showToast('Select a distance', 'error'); return; }
+
+  const type    = STATE.currentMatchType;
+  const scoring = STATE.currentScoring;
+  const msg     = document.getElementById('invite-msg').value.trim();
+  let deadline  = null;
+
+  if (['async', 'scheduled'].includes(type)) {
+    // Private challenges don't require a deadline — the link IS the access control
+    const raw = document.getElementById('challenge-deadline').value;
+    if (!raw) { showToast('Set a deadline', 'error'); return; }
+    deadline = new Date(raw).toISOString();
+  } else if (type === 'private') {
+    // Optional deadline for private challenges
+    const raw = document.getElementById('challenge-deadline').value;
+    if (raw) deadline = new Date(raw).toISOString();
+  }
+
+  const payload = {
+    match_type:     type,  // values: 'live' | 'async' | 'scheduled' | 'private'
+    scoring,
+    distance:       distChip.textContent.trim(),
+    arrow_count:    STATE.arrowCount,
+    invite_message: msg || null,
+    deadline,
+  };
+
+  let challengeId;
+  try {
+    const data = await api('POST', '/api/challenges', payload);
+    challengeId = data.id;
+    // Add to local myChallenges from server response
+    STATE.myChallenges.unshift(data);
+  } catch (e) {
+    // Offline: create locally
+    challengeId = `local-${Date.now()}`;
+    const localCh = { id: challengeId, ...payload, isPrivate: type === 'private', created_at: new Date().toISOString() };
+    STATE.myChallenges.unshift(localCh);
+    showToast('Created locally (offline)', 'info');
+  }
+
+  localStorage.setItem('arrowmatch_my_challenges', JSON.stringify(STATE.myChallenges));
+
+  if (type === 'private') {
+    const link = buildChallengeLink(challengeId);
+    copyToClipboard(link);
+    showToast('Private link copied to clipboard!', 'success');
+    showScene('my-challenges');
+  } else if (type === 'live') {
+    startMatch({
+      id: challengeId, name: 'Waiting for opponent…',
+      distance: distChip.textContent.trim(), scoring, arrowCount: STATE.arrowCount,
+    }, true);
+  } else {
+    showScene('my-challenges');
+    showToast('Challenge created!', 'success');
+  }
+}
+
+function buildChallengeLink(id) {
+  return `${location.origin}${location.pathname}?c=${id}`;
+}
+
+// ==================== MY CHALLENGES ====================
+
+async function refreshMyChallenges() {
+  const container = document.getElementById('my-challenges-list');
+
+  try {
+    const data = await api('GET', '/api/challenges/mine');
+    if (data) {
+      STATE.myChallenges = data;
+      localStorage.setItem('arrowmatch_my_challenges', JSON.stringify(data));
+    }
+  } catch {}
+
+  if (STATE.myChallenges.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">◈</div><p class="empty-text">No challenges yet. Create one!</p></div>`;
+    return;
+  }
+
+  container.innerHTML = STATE.myChallenges.map(ch => {
+    const type    = ch.match_type || ch.type || '—';
+    const scoring = ch.scoring || 'total';
+    const dist    = ch.distance || '—';
+    const arrows  = ch.arrow_count || ch.arrowCount;
+    const isPriv  = ch.is_private === true || ch.isPrivate === true || ch.match_type === 'private';
+    return `
+    <div class="my-ch-card">
+      <div class="my-ch-header">
+        <span class="my-ch-title">${dist} · ${scoring === 'sets' ? 'Set System' : (arrows + ' arrows')}</span>
+        <span class="my-ch-type">${type}</span>
+      </div>
+      <div class="ch-card-tags" style="margin-bottom:12px">
+        <span class="ch-tag">${ch.creator_bow_type || STATE.profile?.bowType || '—'}</span>
+        <span class="ch-tag">${ch.creator_skill_level || STATE.profile?.skillLevel || '—'}</span>
+      </div>
+      <div class="my-ch-actions">
+        ${isPriv ? `<button class="btn-sm btn-copy" onclick="copyPrivateLink('${ch.id}')">Copy Link</button>` : ''}
+        <button class="btn-sm btn-danger" onclick="deleteChallenge('${ch.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteChallenge(id) {
+  // Remove from DOM immediately (optimistic)
+  STATE.myChallenges = STATE.myChallenges.filter(c => c.id !== id);
+  localStorage.setItem('arrowmatch_my_challenges', JSON.stringify(STATE.myChallenges));
+  refreshMyChallenges();
+
+  try {
+    await api('DELETE', `/api/challenges/${id}`);
+    showToast('Challenge deleted', 'info');
+  } catch (e) {
+    showToast(e.message || 'Delete failed on server', 'error');
+  }
+}
+
+function copyPrivateLink(id) {
+  copyToClipboard(buildChallengeLink(id));
+  showToast('Link copied!', 'success');
+}
+
+// ==================== MATCH SCENE ====================
+
+function startMatch(challenge, isCreator = false) {
+  // Show the resume tab so user can always return to this match
+  const resumeTab = document.getElementById('resume-tab');
+  if (resumeTab) resumeTab.classList.remove('hidden');
+  const myName    = STATE.profile?.name || 'You';
+  const oppName   = challenge.creator_name || challenge.name || 'Opponent';
+  const scoring   = challenge.scoring || 'total';
+  const arrowCount = challenge.arrow_count || challenge.arrowCount || STATE.arrowCount || 18;
+  const dist      = challenge.distance || '30m';
+
+  STATE.matchState = {
+    id: challenge.matchId || challenge.id,
+    challengeId: challenge.id,
+    myName, oppName, scoring, arrowCount, dist,
+    isBot: challenge.isBot || false,
+    arrowValues: [],
+    setMyScore: 0, setOppScore: 0, currentSet: 1, setArrowValues: [],
+    complete: false, isCreator,
+  };
+
+  saveMatchState();
+  renderMatchScene();
+  showScene('challenge');
+
+  // Connect live WebSocket if we have a real matchId
+  if (challenge.matchId && !challenge.isBot) {
+    _connectMatchSocket(challenge.matchId);
+  }
+
+  // If creator is waiting for a live challenge opponent, spawn a bot after 2 minutes
+  if (isCreator && !challenge.isBot && challenge.matchId) {
+    _scheduleBotFallback(challenge);
+  }
+}
+
+// Countdown timer shown while creator waits for opponent
+let _botFallbackTimer = null;
+
+function _scheduleBotFallback(challenge) {
+  // Clear any previous timer
+  if (_botFallbackTimer) { clearTimeout(_botFallbackTimer); _botFallbackTimer = null; }
+
+  const BOT_WAIT_MS = 2 * 60 * 1000; // 2 minutes
+  const startTime   = Date.now();
+  const ms          = STATE.matchState;
+
+  // Update opponent name to show countdown
+  function updateCountdown() {
+    if (!STATE.matchState || STATE.matchState.complete) return;
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, Math.ceil((BOT_WAIT_MS - elapsed) / 1000));
+    const mins = Math.floor(remaining / 60);
+    const secs = String(remaining % 60).padStart(2, '0');
+    const oppEl = document.getElementById('opp-name');
+    if (oppEl && STATE.matchState?.id === ms?.id) {
+      oppEl.textContent = remaining > 0
+        ? `Waiting for opponent (${mins}:${secs})`
+        : 'Connecting bot…';
+    }
+    if (remaining > 0) requestAnimationFrame(updateCountdown);
+  }
+  requestAnimationFrame(updateCountdown);
+
+  _botFallbackTimer = setTimeout(() => {
+    // Only activate if match not yet completed and opponent hasn't joined
+    if (!STATE.matchState || STATE.matchState.complete) return;
+    // Check if opponent already joined via WS (match would have received a message)
+    if (STATE.matchState._opponentJoined) return;
+
+    const bot = generateBotOpponent();
+    bot.distance = challenge.distance || STATE.matchState.dist || '30m';
+    bot.scoring  = challenge.scoring  || STATE.matchState.scoring || 'total';
+    bot.arrowCount = challenge.arrow_count || STATE.matchState.arrowCount || 18;
+
+    // Update match state — keep the same match ID, just swap opponent to bot
+    STATE.matchState.oppName = bot.name;
+    STATE.matchState.isBot   = true;
+    saveMatchState();
+
+    const oppEl = document.getElementById('opp-name');
+    if (oppEl) oppEl.textContent = bot.name;
+    showToast(`No opponent joined — ${bot.name} is challenging you!`, 'info');
+  }, BOT_WAIT_MS);
+}
+
+function _connectMatchSocket(matchId) {
+  if (matchSocket) { matchSocket.close(); matchSocket = null; }
+  try {
+    matchSocket = new WebSocket(`${WS_BASE}/ws/match/${matchId}?token=${STATE.accessToken || ''}`);
+
+    matchSocket.onopen = () => {
+      // Start a keepalive ping every 20s
+      matchSocket._pingTimer = setInterval(() => {
+        if (matchSocket?.readyState === WebSocket.OPEN) {
+          matchSocket.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 20000);
+    };
+
+    matchSocket.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      // Any message from server means opponent is connected — cancel bot fallback
+      if (STATE.matchState && !STATE.matchState.isBot) {
+        STATE.matchState._opponentJoined = true;
+        if (_botFallbackTimer) { clearTimeout(_botFallbackTimer); _botFallbackTimer = null; }
+        const oppEl = document.getElementById('opp-name');
+        if (oppEl && (oppEl.textContent.startsWith('Waiting') || oppEl.textContent.startsWith('Connecting'))) {
+          oppEl.textContent = STATE.matchState.oppName;
+        }
+      }
+
+      switch (msg.type) {
+        case 'opp_arrow':
+          _onOpponentArrow(msg.arrow_index, msg.value);
+          break;
+
+        case 'opp_set_done': {
+          // Opponent submitted their set — if we have a pending result, re-fetch it
+          const ms = STATE.matchState;
+          if (ms?._pendingSetNumber !== undefined) {
+            const pendingSet = ms._pendingSetNumber;
+            delete ms._pendingSetNumber;
+            api('POST', `/api/matches/${ms.id}/set`, {
+              set_number: pendingSet,
+              arrows: ms.setArrowValues || [],
+            }).then(result => { if (result) _applySetResult(result); });
+          }
+          break;
+        }
+
+        case 'opp_tiebreak_done': {
+          const ms = STATE.matchState;
+          if (ms?._pendingTiebreak) {
+            delete ms._pendingTiebreak;
+            const myArrow = arrowValues[0];
+            if (myArrow !== null) {
+              api('POST', `/api/matches/${ms.id}/set`, {
+                set_number: 0,
+                arrows: [myArrow],
+              }).then(result => {
+                if (!result) return;
+                if (result.tiebreak_required) {
+                  showToast('Still tied! Shoot one more.', 'info');
+                  arrowValues = [null]; activeArrowIndex = 0;
+                  refreshSetArrowCells(); _setNumpadDisabled(false); _setStatus('');
+                } else if (result.match_complete) {
+                  _setStatus('');
+                  completeMatch(result.my_set_points, result.opp_set_points);
+                }
+              });
+            }
+          }
+          break;
+        }
+
+        case 'opp_score_done':
+          // Opponent submitted total score — speed up our poll interval
+          if (STATE.matchState?._polling) {
+            clearInterval(_pollInterval);
+            _pollInterval = null;
+            _pollForResult();
+          }
+          break;
+
+        case 'opponent_disconnected':
+          showToast('Opponent disconnected', 'error');
+          break;
+
+        case 'pong':
+          break;
+      }
+    };
+
+    matchSocket.onerror = () => {
+      showToast('Live connection error — continuing offline', 'error');
+    };
+
+    matchSocket.onclose = () => {
+      if (matchSocket?._pingTimer) clearInterval(matchSocket._pingTimer);
+    };
+
+  } catch (err) {
+    console.warn('WebSocket unavailable for live match:', err);
+  }
+}
+
+function _onOpponentArrow(arrowIndex, value) {
+  const ms = STATE.matchState;
+  if (!ms || ms.scoring !== 'total') return;
+  const indicator = document.getElementById('opp-live-indicator');
+  if (!indicator) return;
+  indicator.classList.remove('hidden');
+  indicator.classList.add('active');
+  indicator.textContent = `${ms.oppName}: arrow ${arrowIndex + 1} → ${value}`;
+  clearTimeout(indicator._hideTimer);
+  indicator._hideTimer = setTimeout(() => {
+    indicator.classList.remove('active');
+    indicator.textContent = `${ms.oppName} is shooting…`;
+  }, 2500);
+}
+
+function _onOpponentRowComplete(row, rowTotal, arrows) {
+  const ms = STATE.matchState;
+  if (!ms) return;
+  showToast(`${ms.oppName}: row ${row + 1} = ${rowTotal}`, 'info');
+  const indicator = document.getElementById('opp-live-indicator');
+  if (indicator) {
+    indicator.classList.remove('hidden');
+    indicator.textContent = `${ms.oppName} row ${row + 1}: ${arrows.join('  ')} = ${rowTotal}`;
+  }
+}
+
+function _showOppSetArrows(oppTotal, arrows) {
+  // Briefly show opponent's set total below our arrow row
+  const ms = STATE.matchState;
+  const indicator = document.getElementById('opp-live-indicator');
+  if (indicator) {
+    indicator.classList.remove('hidden');
+    const arrowStr = arrows.length ? arrows.join(' ') + ' = ' : '';
+    indicator.textContent = `${ms?.oppName || 'Opp'}: ${arrowStr}${oppTotal} pts`;
+    clearTimeout(indicator._hideTimer);
+    indicator._hideTimer = setTimeout(() => indicator.classList.add('hidden'), 3500);
+  }
+}
+
+// kept for compatibility
+function _onOpponentSetComplete(msg) { /* superseded by opp_set_done WS handler */ }
+
+function restoreMatch() {
+  if (!STATE.matchState) return;
+  renderMatchScene();
+  arrowValues = [...STATE.matchState.arrowValues];
+  refreshArrowCells();
+}
+
+function renderMatchScene() {
+  const ms = STATE.matchState;
+  document.getElementById('ch-my-name').textContent  = ms.myName;
+  document.getElementById('ch-opp-name').textContent = ms.oppName;
+  document.getElementById('ch-dist').textContent     = ms.dist;
+
+  // Ensure match-status element exists
+  if (!document.getElementById('match-status')) {
+    const el = document.createElement('div');
+    el.id = 'match-status';
+    el.className = 'match-status-bar hidden';
+    document.getElementById('score-board')?.prepend(el);
+  }
+
+  const isTotal = ms.scoring === 'total';
+  document.getElementById('total-score-ui').classList.toggle('hidden', !isTotal);
+  document.getElementById('set-score-ui').classList.toggle('hidden', isTotal);
+
+  if (isTotal) {
+    buildArrowRows(ms.arrowCount);
+    arrowValues = ms.arrowValues.length ? [...ms.arrowValues] : new Array(ms.arrowCount).fill(null);
+    activeArrowIndex = arrowValues.findIndex(v => v === null);
+    if (activeArrowIndex === -1) activeArrowIndex = ms.arrowCount - 1;
+    refreshArrowCells();
+  } else {
+    arrowValues = ms.setArrowValues.length ? [...ms.setArrowValues] : new Array(3).fill(null);
+    buildSetArrowRow();
+    activeArrowIndex = arrowValues.findIndex(v => v === null);
+    if (activeArrowIndex === -1) activeArrowIndex = 2;
+    refreshSetArrowCells();
+    document.getElementById('set-my-name').textContent  = ms.myName;
+    document.getElementById('set-opp-name').textContent = ms.oppName;
+    refreshSetScore();
+  }
+  document.getElementById('match-complete').classList.add('hidden');
+}
+
+function buildArrowRows(count) {
+  const container = document.getElementById('arrow-rows');
+  const rowCount  = Math.ceil(count / 3);
+  let html = '';
+  for (let r = 0; r < rowCount; r++) {
+    const start = r * 3;
+    html += `<div class="arrow-row">
+      <span class="arrow-row-num">${r + 1}</span>
+      <div class="arrow-inputs">`;
+    for (let i = 0; i < 3; i++) {
+      const idx = start + i;
+      if (idx < count) {
+        html += `<div class="arrow-cell" id="ac-${idx}" onclick="activateCell(${idx})"></div>`;
+      } else {
+        html += `<div class="arrow-cell" style="visibility:hidden"></div>`;
+      }
+    }
+    html += `</div><span class="row-sum" id="rs-${r}"></span></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function buildSetArrowRow(count = 3) {
+  const container = document.getElementById('set-arrow-row');
+  container.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'arrow-cell';
+    cell.id = `sac-${i}`;
+    cell.onclick = () => activateSetCell(i);
+    container.appendChild(cell);
+  }
+  // resize arrowValues to match
+  arrowValues = new Array(count).fill(null);
+}
+
+function activateCell(idx) {
+  activeArrowIndex = idx;
+  refreshArrowCells();
+}
+
+function activateSetCell(idx) {
+  activeArrowIndex = idx;
+  refreshSetArrowCells();
+}
+
+function numInput(val) {
+  if (STATE.matchState?.scoring === 'sets') {
+    numInputSet(val);
+  } else {
+    numInputTotal(val);
+  }
+  saveMatchState();
+  // Broadcast to live opponent via WebSocket
+  if (matchSocket?.readyState === WebSocket.OPEN) {
+    matchSocket.send(JSON.stringify({
+      type: 'score_update',
+      arrow_index: activeArrowIndex,
+      value: val,
+    }));
+  }
+}
+
+function numInputTotal(val) {
+  const ms = STATE.matchState;
+  if (activeArrowIndex >= ms.arrowCount) return;
+  const prevIdx = activeArrowIndex;
+  arrowValues[activeArrowIndex] = val;
+  ms.arrowValues = [...arrowValues];
+  const next = arrowValues.findIndex((v, i) => i > activeArrowIndex && v === null);
+  activeArrowIndex = next === -1 ? ms.arrowCount - 1 : next;
+  refreshArrowCells();
+  updateTotalSum();
+
+  // Broadcast single arrow preview to opponent
+  if (matchSocket?.readyState === WebSocket.OPEN) {
+    matchSocket.send(JSON.stringify({
+      type: 'arrow',
+      arrow_index: prevIdx,
+      value: val,
+    }));
+  }
+
+  checkTotalComplete();
+}
+
+function numInputSet(val) {
+  const ms = STATE.matchState;
+  const maxIdx = arrowValues.length - 1;
+  if (activeArrowIndex > maxIdx) return;
+  arrowValues[activeArrowIndex] = val;
+  ms.setArrowValues = [...arrowValues];
+  const next = arrowValues.findIndex((v, i) => i > activeArrowIndex && v === null);
+  activeArrowIndex = next === -1 ? maxIdx : next;
+  refreshSetArrowCells();
+  if (arrowValues.every(v => v !== null)) {
+    setTimeout(() => {
+      if (ms._tiebreak || ms._tiebreakTotal) {
+        resolveTiebreak();
+      } else {
+        resolveSet();
+      }
+    }, 400);
+  }
+}
+
+function numDel() {
+  if (STATE.matchState?.scoring === 'sets') numDelSet();
+  else numDelTotal();
+  saveMatchState();
+}
+
+function numDelTotal() {
+  const ms = STATE.matchState;
+  let target = activeArrowIndex;
+  if (arrowValues[target] === null) {
+    for (let i = target - 1; i >= 0; i--) {
+      if (arrowValues[i] !== null) { target = i; break; }
+    }
+  }
+  arrowValues[target] = null;
+  ms.arrowValues = [...arrowValues];
+  activeArrowIndex = target;
+  refreshArrowCells();
+  updateTotalSum();
+}
+
+function numDelSet() {
+  let target = activeArrowIndex;
+  if (arrowValues[target] === null) {
+    for (let i = target - 1; i >= 0; i--) {
+      if (arrowValues[i] !== null) { target = i; break; }
+    }
+  }
+  arrowValues[target] = null;
+  STATE.matchState.setArrowValues = [...arrowValues];
+  activeArrowIndex = target;
+  refreshSetArrowCells();
+}
+
+function refreshArrowCells() {
+  const ms = STATE.matchState;
+  for (let i = 0; i < ms.arrowCount; i++) {
+    const cell = document.getElementById(`ac-${i}`);
+    if (!cell) continue;
+    const v = arrowValues[i];
+    cell.className = 'arrow-cell';
+    if (i === activeArrowIndex) cell.classList.add('active');
+    if (v !== null) {
+      cell.textContent = v;
+      if (v === 10) cell.classList.add('filled-10');
+      else if (v === 9) cell.classList.add('filled-9');
+      else if (v === 8) cell.classList.add('filled-8');
+      else cell.classList.add('filled');
+    } else {
+      cell.textContent = '';
+    }
+  }
+  const rowCount = Math.ceil(ms.arrowCount / 3);
+  for (let r = 0; r < rowCount; r++) {
+    const start  = r * 3;
+    const end    = Math.min(start + 3, ms.arrowCount);
+    const filled = arrowValues.slice(start, end).filter(v => v !== null);
+    const rsEl   = document.getElementById(`rs-${r}`);
+    if (rsEl) rsEl.textContent = filled.length === (end - start) ? filled.reduce((a, b) => a + b, 0) : '';
+  }
+}
+
+function refreshSetArrowCells() {
+  for (let i = 0; i < 3; i++) {
+    const cell = document.getElementById(`sac-${i}`);
+    if (!cell) continue;
+    const v = arrowValues[i];
+    cell.className = 'arrow-cell';
+    if (i === activeArrowIndex) cell.classList.add('active');
+    if (v !== null) {
+      cell.textContent = v;
+      if (v === 10) cell.classList.add('filled-10');
+      else if (v === 9) cell.classList.add('filled-9');
+      else if (v === 8) cell.classList.add('filled-8');
+      else cell.classList.add('filled');
+    } else {
+      cell.textContent = '';
+    }
+  }
+}
+
+function updateTotalSum() {
+  const sum = arrowValues.filter(v => v !== null).reduce((a, b) => a + b, 0);
+  document.getElementById('total-sum').textContent = sum;
+}
+
+function checkTotalComplete() {
+  const ms = STATE.matchState;
+  if (arrowValues.every(v => v !== null)) {
+    const myScore = arrowValues.reduce((a, b) => a + b, 0);
+    _submitScoreToServer(arrowValues);
+    const botScore = Math.round(myScore + (Math.random() * 2 - 1) * myScore * 0.10);
+    completeMatch(myScore, botScore);
+  }
+}
+
+async function _submitScoreToServer(arrows) {
+  const ms = STATE.matchState;
+  if (!ms?.id || ms.isBot) return;
+  const payload = {
+    arrows: arrows.map((value, arrow_index) => ({ arrow_index, value }))
+  };
+  try {
+    await api('POST', `/api/matches/${ms.id}/score`, payload);
+  } catch (e) {
+    console.warn('Score submit failed (will not retry):', e.message);
+  }
+
+  // Notify live opponent that we submitted (they can speed-poll)
+  if (matchSocket?.readyState === WebSocket.OPEN) {
+    matchSocket.send(JSON.stringify({ type: 'score_submitted' }));
+  }
+}
+
+// ==================== SET-SYSTEM MODE ====================
+// Each set: enter 3 arrows → POST /api/matches/:id/set → server decides
+// winner. If both tied at 6:6, sudden-death 1-arrow tiebreak.
+
+async function resolveSet() {
+  const ms = STATE.matchState;
+  if (!ms || ms._setSubmitting) return;
+  ms._setSubmitting = true;
+
+  const myArrows  = arrowValues.filter(v => v !== null);
+  const myTotal   = myArrows.reduce((a, b) => a + b, 0);
+  const setNumber = ms.currentSet;
+
+  // Disable numpad while waiting for server
+  _setNumpadDisabled(true);
+  _setStatus(`Set ${setNumber}: waiting for opponent…`);
+
+  // Tell opponent via WS that we submitted (so they know to poll)
+  if (matchSocket?.readyState === WebSocket.OPEN) {
+    matchSocket.send(JSON.stringify({ type: 'set_submitted', set_number: setNumber }));
+  }
+
+  // If bot match — generate bot set locally, send both to server
+  if (ms.isBot) {
+    const botArrows = _genBotArrows(ms.oppSkill || 'Skilled');
+    const botTotal  = botArrows.reduce((a, b) => a + b, 0);
+    _resolveSetLocally(myTotal, botTotal, setNumber, ms);
+    ms._setSubmitting = false;
+    return;
+  }
+
+  // Real match — submit set to server and poll for verdict
+  try {
+    const result = await api('POST', `/api/matches/${ms.id}/set`, {
+      set_number: setNumber,
+      arrows: myArrows,
+    });
+    ms._setSubmitting = false;
+    _applySetResult(result);
+  } catch (e) {
+    showToast('Network error — retrying…', 'error');
+    ms._setSubmitting = false;
+    _setNumpadDisabled(false);
+    _setStatus('');
+  }
+}
+
+function _resolveSetLocally(myTotal, oppTotal, setNumber, ms) {
+  let myPts = 0, oppPts = 0;
+  let winner;
+  if (myTotal > oppTotal)      { myPts = 2; winner = 'me'; }
+  else if (oppTotal > myTotal) { oppPts = 2; winner = 'opponent'; }
+  else                          { myPts = 1; oppPts = 1; winner = 'draw'; }
+
+  ms.setMyScore  += myPts;
+  ms.setOppScore += oppPts;
+  ms.currentSet++;
+  refreshSetScore();
+
+  const label = winner === 'me' ? '✓ You win this set!'
+              : winner === 'opponent' ? `${ms.oppName} wins this set`
+              : 'Set draw — 1 pt each';
+
+  showToast(`Set ${setNumber}: ${myTotal} vs ${oppTotal} — ${label}`, winner === 'me' ? 'success' : 'info');
+
+  if (ms.setMyScore >= 6 || ms.setOppScore >= 6) {
+    if (ms.setMyScore === 6 && ms.setOppScore === 6) {
+      _startTiebreak();
+    } else {
+      completeMatch(ms.setMyScore, ms.setOppScore);
+    }
+  } else {
+    _nextSet(setNumber);
+  }
+  saveMatchState();
+}
+
+function _applySetResult(result) {
+  const ms = STATE.matchState;
+  if (!result.both_submitted) {
+    // Opponent hasn't submitted yet — wait for WS notification then re-fetch
+    _setStatus(`Set ${result.set_number}: your arrows recorded. Waiting for ${ms.oppName}…`);
+    ms._pendingSetNumber = result.set_number;
+    // Will be triggered by opp_set_done WS message
+    return;
+  }
+
+  const setNumber = result.set_number;
+  ms.setMyScore  = result.my_set_points;
+  ms.setOppScore = result.opp_set_points;
+  ms.currentSet  = setNumber + 1;
+  refreshSetScore();
+
+  const winner = result.set_winner;
+  const label  = winner === 'me' ? '✓ You win this set!'
+               : winner === 'opponent' ? `${ms.oppName} wins this set`
+               : 'Set draw — 1 pt each';
+
+  showToast(
+    `Set ${setNumber}: ${result.my_set_total} vs ${result.opp_set_total} — ${label}`,
+    winner === 'me' ? 'success' : 'info'
+  );
+
+  // Show opponent arrows briefly
+  _showOppSetArrows(result.opp_set_total, []);
+
+  if (result.tiebreak_required) {
+    _startTiebreak();
+  } else if (result.match_complete) {
+    completeMatch(ms.setMyScore, ms.setOppScore);
+  } else {
+    _nextSet(setNumber);
+  }
+  saveMatchState();
+}
+
+function _nextSet(prevSetNumber) {
+  const ms = STATE.matchState;
+  arrowValues = new Array(3).fill(null);
+  ms.setArrowValues = [];
+  activeArrowIndex = 0;
+  buildSetArrowRow();
+  refreshSetArrowCells();
+  _setNumpadDisabled(false);
+  _setStatus('');
+  document.getElementById('set-progress').textContent = `Set ${ms.currentSet}`;
+}
+
+function _startTiebreak() {
+  const ms = STATE.matchState;
+  ms._tiebreak = true;
+  arrowValues = [null]; // 1-arrow sudden death
+  ms.setArrowValues = [];
+  activeArrowIndex = 0;
+  buildSetArrowRow(1); // rebuild with 1 cell
+  refreshSetArrowCells();
+  _setNumpadDisabled(false);
+  _setStatus('');
+  document.getElementById('set-progress').textContent = 'Tiebreak — sudden death';
+  showToast('Tied at 6:6! One arrow decides — highest score wins.', 'info');
+  saveMatchState();
+}
+
+async function resolveTiebreak() {
+  const ms = STATE.matchState;
+  const myArrow = arrowValues[0];
+  if (myArrow === null) return;
+
+  _setNumpadDisabled(true);
+  _setStatus('Tiebreak: waiting for opponent…');
+
+  if (matchSocket?.readyState === WebSocket.OPEN) {
+    matchSocket.send(JSON.stringify({ type: 'tiebreak_submitted', set_number: 0 }));
+  }
+
+  if (ms.isBot) {
+    const botArrow = Math.floor(Math.random() * 11);
+    let myScore = ms.setMyScore, oppScore = ms.setOppScore;
+    if (myArrow > botArrow)      { myScore  += 2; }
+    else if (botArrow > myArrow) { oppScore += 2; }
+    else { myScore++; oppScore++; } // exact tie → shoot again
+    if (myArrow === botArrow) {
+      showToast(`Both shot ${myArrow}! Shoot again.`, 'info');
+      arrowValues = [null]; activeArrowIndex = 0;
+      refreshSetArrowCells();
+      _setNumpadDisabled(false);
+      _setStatus('');
+      return;
+    }
+    completeMatch(myScore, oppScore);
+    return;
+  }
+
+  try {
+    const result = await api('POST', `/api/matches/${ms.id}/set`, {
+      set_number: 0, // tiebreak sentinel
+      arrows: [myArrow],
+    });
+    if (!result.both_submitted) {
+      _setStatus(`Tiebreak: waiting for ${ms.oppName}…`);
+      ms._pendingTiebreak = true;
+      return;
+    }
+    if (result.tiebreak_required) {
+      // Still tied — shoot again
+      showToast(`Both shot equal! Shoot one more arrow.`, 'info');
+      arrowValues = [null]; activeArrowIndex = 0;
+      refreshSetArrowCells();
+      _setNumpadDisabled(false);
+      _setStatus('');
+      return;
+    }
+    _setStatus('');
+    completeMatch(result.my_set_points, result.opp_set_points);
+  } catch (e) {
+    showToast('Network error on tiebreak', 'error');
+    _setNumpadDisabled(false);
+    _setStatus('');
+  }
+}
+
+
+// ==================== TOTAL SCORE MODE ====================
+// Enter all arrows → POST /api/matches/:id/score → poll for opponent result.
+
+async function checkTotalComplete() {
+  const ms = STATE.matchState;
+  if (!arrowValues.every(v => v !== null)) return;
+
+  const myScore = arrowValues.reduce((a, b) => a + b, 0);
+  _setNumpadDisabled(true);
+
+  await _submitScoreToServer(arrowValues);
+
+  if (ms.isBot) {
+    // Bot: local resolution
+    const botScore = _genBotTotal(myScore, ms.oppSkill || 'Skilled');
+    if (myScore === botScore) {
+      // Tiebreak
+      _startTotalTiebreak(myScore);
+    } else {
+      completeMatch(myScore, botScore);
+    }
+    return;
+  }
+
+  // Real match: show waiting UI and poll
+  _setStatus(`Score submitted (${myScore}). Waiting for ${ms.oppName}…`);
+  ms._totalMyScore = myScore;
+  ms._polling = true;
+  _pollForResult();
+}
+
+let _pollInterval = null;
+function _pollForResult() {
+  if (_pollInterval) clearInterval(_pollInterval);
+  _pollInterval = setInterval(async () => {
+    const ms = STATE.matchState;
+    if (!ms || ms.complete) { clearInterval(_pollInterval); return; }
+    try {
+      const status = await api('GET', `/api/matches/${ms.id}/status`);
+      if (!status) return;
+
+      if (status.tiebreak_required) {
+        clearInterval(_pollInterval);
+        _startTotalTiebreak(ms._totalMyScore);
+        return;
+      }
+      if (status.status === 'complete' && status.result) {
+        clearInterval(_pollInterval);
+        _setStatus('');
+        const oppScore = status.opp_score ?? 0;
+        completeMatch(ms._totalMyScore, oppScore);
+      }
+    } catch {}
+  }, 2000);
+}
+
+function _startTotalTiebreak(myCurrentScore) {
+  const ms = STATE.matchState;
+  ms._tiebreakTotal = true;
+  ms._tiebreakBase  = myCurrentScore;
+  arrowValues       = [null];
+  activeArrowIndex  = 0;
+  // Repurpose set-score UI for tiebreak display
+  document.getElementById('total-score-ui').classList.add('hidden');
+  document.getElementById('set-score-ui').classList.remove('hidden');
+  buildSetArrowRow(1);
+  refreshSetArrowCells();
+  _setNumpadDisabled(false);
+  _setStatus('');
+  document.getElementById('set-progress').textContent = 'Tiebreak — sudden death';
+  showToast('Scores tied! One arrow decides.', 'info');
+  saveMatchState();
+}
+
+
+// ==================== SHARED MATCH COMPLETION ====================
+
+function completeMatch(myScore, oppScore) {
+  const ms = STATE.matchState;
+  ms.complete      = true;
+  ms.myFinalScore  = myScore;
+  ms.oppFinalScore = oppScore;
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+  saveMatchState();
+  saveToHistory(ms);
+
+  let icon, title;
+  if (myScore > oppScore)      { icon = '🏆'; title = 'You Win!'; }
+  else if (oppScore > myScore) { icon = '😤'; title = 'Better luck next time'; }
+  else                          { icon = '🤝'; title = "It's a Draw!"; }
+
+  const resultLine = ms.scoring === 'sets'
+    ? `Set points: ${myScore}–${oppScore}`
+    : `Score: ${myScore} vs ${oppScore}`;
+
+  document.getElementById('complete-icon').textContent  = icon;
+  document.getElementById('complete-title').textContent = title;
+  document.getElementById('complete-result').textContent = resultLine;
+  document.getElementById('match-complete').classList.remove('hidden');
+  _setNumpadDisabled(false);
+  _setStatus('');
+
+  localStorage.removeItem('arrowmatch_match_state');
+  if (matchSocket) { matchSocket.close(); matchSocket = null; }
+
+  const resumeTab = document.getElementById('resume-tab');
+  if (resumeTab) resumeTab.classList.add('hidden');
+}
+
+function _setStatus(msg) {
+  const el = document.getElementById('match-status');
+  if (el) { el.textContent = msg; el.classList.toggle('hidden', !msg); }
+}
+
+function _setNumpadDisabled(disabled) {
+  document.querySelectorAll('.num-btn').forEach(b => { b.disabled = disabled; });
+}
+
+function startRematch() {
+  if (!STATE.matchState) return;
+  const prev = STATE.matchState;
+  document.getElementById('match-complete').classList.add('hidden');
+  startMatch({
+    id: `rematch-${Date.now()}`,
+    name: prev.oppName,
+    isBot: prev.isBot,
+    distance: prev.dist,
+    scoring: prev.scoring,
+    arrowCount: prev.arrowCount,
+    type: 'live',
+  });
+}
+
+function saveMatchState() {
+  if (STATE.matchState && !STATE.matchState.complete) {
+    localStorage.setItem('arrowmatch_match_state', JSON.stringify(STATE.matchState));
+  }
+}
+
+// ==================== HISTORY ====================
+
+async function saveToHistory(ms) {
+  const entry = {
+    id: `h-${Date.now()}`,
+    oppName: ms.oppName,
+    dist: ms.dist,
+    scoring: ms.scoring,
+    myScore: ms.myFinalScore || 0,
+    oppScore: ms.oppFinalScore || 0,
+    result: (ms.myFinalScore || 0) > (ms.oppFinalScore || 0) ? 'win'
+           : (ms.myFinalScore || 0) < (ms.oppFinalScore || 0) ? 'loss' : 'draw',
+    date: new Date().toISOString(),
+  };
+  STATE.history.unshift(entry);
+  if (STATE.history.length > 100) STATE.history.pop();
+  localStorage.setItem('arrowmatch_history', JSON.stringify(STATE.history));
+}
+
+async function refreshHistory() {
+  // Fetch history and achievements from server in parallel
+  let serverAchievements = null;
+
+  try {
+    const [histData, achData] = await Promise.all([
+      api('GET', '/api/history?limit=30'),
+      api('GET', '/api/achievements'),
+    ]);
+
+    if (histData) {
+      STATE.history = histData.map(h => ({
+        id: h.match_id,
+        oppName: h.opponent_name,
+        dist: h.distance,
+        scoring: h.scoring,
+        myScore: h.my_score || 0,
+        oppScore: h.opponent_score || 0,
+        result: h.result,
+        date: h.date,
+      }));
+      localStorage.setItem('arrowmatch_history', JSON.stringify(STATE.history));
+    }
+
+    if (achData) serverAchievements = achData;
+  } catch {}
+
+  renderStats();
+  renderAchievements(serverAchievements);
+  renderHistoryList();
+}
+
+function renderStats() {
+  const last10 = STATE.history.slice(0, 10);
+  const wins   = last10.filter(h => h.result === 'win').length;
+  const avgScore = last10.length
+    ? Math.round(last10.reduce((a, h) => a + h.myScore, 0) / last10.length) : 0;
+  const globalRank = Math.max(1, 1000 - wins * 50);
+  document.getElementById('stat-avg').textContent  = avgScore || '—';
+  document.getElementById('stat-wins').textContent = wins;
+  document.getElementById('stat-rank').textContent = `#${globalRank}`;
+}
+
+function renderAchievements(serverBadges = null) {
+  let badges;
+
+  if (serverBadges && Array.isArray(serverBadges)) {
+    // Use authoritative server data
+    badges = serverBadges.map(b => ({
+      icon: b.icon, label: b.label, earned: b.earned
+    }));
+  } else {
+    // Offline fallback: compute from local history
+    const total = STATE.history.length;
+    let streak = 0;
+    for (const h of STATE.history) {
+      if (h.result === 'win') streak++;
+      else break;
+    }
+    badges = [
+      { icon: '🔥', label: '5 Win Streak',  earned: streak >= 5 },
+      { icon: '⚡', label: '10 Win Streak', earned: streak >= 10 },
+      { icon: '👑', label: '25 Win Streak', earned: streak >= 25 },
+      { icon: '🎯', label: '10 Matches',    earned: total >= 10 },
+      { icon: '🏹', label: '50 Matches',    earned: total >= 50 },
+      { icon: '🌟', label: '100 Matches',   earned: total >= 100 },
+    ];
+  }
+
+  document.getElementById('achievements-grid').innerHTML = badges.map(b => `
+    <div class="achievement-badge ${b.earned ? 'earned' : ''}">
+      <span class="badge-icon">${b.icon}</span>
+      <span class="badge-label">${b.label}</span>
+    </div>`).join('');
+}
+
+function renderHistoryList() {
+  const container = document.getElementById('history-list');
+  if (STATE.history.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">◷</div><p class="empty-text">No matches played yet</p></div>`;
+    return;
+  }
+  const icons = { win: '✓', loss: '✗', draw: '=' };
+  container.innerHTML = STATE.history.slice(0, 30).map(h => `
+    <div class="history-item">
+      <div class="hi-result ${h.result}">${icons[h.result]}</div>
+      <div class="hi-info">
+        <div class="hi-opp">${escHtml(h.oppName)}</div>
+        <div class="hi-meta">${h.dist} · ${h.scoring === 'sets' ? 'Sets' : 'Total'} · ${formatDate(new Date(h.date))}</div>
+      </div>
+      <div class="hi-score ${h.result}">${h.myScore}</div>
+    </div>`).join('');
+}
+
+// ==================== CHALLENGE LINK ====================
+
+async function handleChallengeLink(code) {
+  showToast('Opening challenge…', 'info');
+  showUI();
+  try {
+    // Fetch the full challenge so we get match_type, scoring, distance, arrow_count
+    const ch = await api('GET', `/api/challenges/${code}`);
+    if (ch) {
+      // If challenge is active, join it (creates a Match on the server)
+      if (ch.is_active !== false) {
+        try {
+          const joined = await api('POST', `/api/challenges/${ch.id}/join`);
+          if (joined?.match_id) {
+            startMatch({
+              ...ch,
+              matchId: joined.match_id,
+              name: ch.creator_name || 'Challenger',
+              scoring: ch.scoring,
+              arrowCount: ch.arrow_count || 18,
+            });
+            return;
+          }
+        } catch (e) {
+          // Already joined or own challenge — just open score input
+        }
+      }
+      // Fallback: open score input directly with full challenge data
+      startMatch({
+        id: ch.id,
+        name: ch.creator_name || 'Challenger',
+        distance: ch.distance || '30m',
+        scoring: ch.scoring || 'total',
+        arrowCount: ch.arrow_count || 18,
+        match_type: ch.match_type,
+      });
+    } else {
+      startMatch({ id: code, name: 'Challenger', distance: '30m', scoring: 'total', arrowCount: 18 });
+    }
+  } catch {
+    startMatch({ id: code, name: 'Challenger', distance: '30m', scoring: 'total', arrowCount: 18 });
+  }
+}
+
+// ==================== FILTERS ====================
+
+function toggleFilter(btn) {
+  const filter = btn.dataset.filter;
+  const val    = btn.dataset.val;
+  btn.classList.toggle('active');
+  const key = { skill: 'skill', gender: 'gender', bow: 'bow', dist: 'dist' }[filter];
+  if (!key) return;
+  if (btn.classList.contains('active')) {
+    if (!STATE.filters[key].includes(val)) STATE.filters[key].push(val);
+  } else {
+    STATE.filters[key] = STATE.filters[key].filter(v => v !== val);
+  }
+  updateFilterBadge();
+}
+
+function updateFilterBadge() {
+  const allSelected =
+    STATE.filters.skill.length === 3 &&
+    STATE.filters.gender.length === 2 &&
+    STATE.filters.bow.length === 3 &&
+    STATE.filters.dist.length === 6 &&
+    !STATE.filters.country;
+  document.getElementById('filter-badge').textContent = allSelected ? 'All' : 'Active';
+}
+
+function selectChip(btn, group) {
+  const container = btn.closest(`[id$="${group}-chips"]`) || btn.parentElement;
+  container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ==================== COUNTRIES ====================
+
+function loadCountries() {
+  const countries = [
+    'Afghanistan','Albania','Algeria','Argentina','Armenia','Australia','Austria','Azerbaijan',
+    'Bangladesh','Belarus','Belgium','Bolivia','Brazil','Bulgaria','Canada','Chile','China',
+    'Colombia','Croatia','Czech Republic','Denmark','Ecuador','Egypt','Estonia','Finland',
+    'France','Georgia','Germany','Ghana','Greece','Hungary','India','Indonesia','Iran','Iraq',
+    'Ireland','Israel','Italy','Japan','Jordan','Kazakhstan','Kenya','South Korea','Latvia',
+    'Lebanon','Lithuania','Luxembourg','Malaysia','Mexico','Morocco','Netherlands',
+    'New Zealand','Nigeria','Norway','Pakistan','Peru','Philippines','Poland','Portugal',
+    'Romania','Russia','Saudi Arabia','Serbia','Singapore','Slovakia','Slovenia',
+    'South Africa','Spain','Sri Lanka','Sweden','Switzerland','Taiwan','Turkey','Uganda',
+    'Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan',
+    'Venezuela','Vietnam',
+  ];
+  ['s-country', 'filter-country'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    countries.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ==================== UTILITIES ====================
+
+function _generateLocalId() {
+  const ts   = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 10).toUpperCase();
+  return `AM-${ts}-${rand}`;
+}
+
+function _serverProfileToLocal(p) {
+  return {
+    name:       p.name,
+    gender:     p.gender,
+    age:        p.age,
+    bowType:    p.bow_type,
+    skillLevel: p.skill_level,
+    country:    p.country,
+  };
+}
+
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => _fallbackCopy(text));
+  } else {
+    _fallbackCopy(text);
+  }
+}
+
+function _fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch {}
+  document.body.removeChild(ta);
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function getTimeAgo(date) {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+</script>
+</body>
+</html>
