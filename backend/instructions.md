@@ -1029,3 +1029,52 @@ Use this checklist after every change to verify no regressions.
 - Background match events: score submissions trigger toast notification only
 - `opp_score_done` on background match: toast "X submitted score in another match"
 - `opponent_forfeited` on background match: auto-resolves silently + toast
+
+---
+
+## 18. Bug Fix — Background Match Status Polling
+
+### Fix 2026-03 — Client stuck on MATCH screen after challenge finished/removed
+
+**Issue:**
+The web client only polled `GET /api/matches/:id/status` inside `total-mode.js → _pollForResult()`,
+which only ran *after* the local user had submitted their own score. If the opponent completed the
+match, or the challenge was deleted server-side, while the client was idling on the MATCH screen
+(arrows not yet submitted), the client had no mechanism to detect the change and remained stuck.
+
+**Affected scenarios:**
+1. Opponent finishes match; client is on MATCH screen but hasn't submitted yet.
+2. Challenge creator deletes the challenge; joined client stays on MATCH screen.
+3. Session restored from localStorage with stale active-match entries that are already complete/gone.
+
+**Root cause:**
+No background polling loop existed for registered (non-submitting) matches. WS `opponent_forfeited`
+handled one edge case, but normal completion or server-side removal had no client-side detection.
+
+**Fix — files changed:**
+
+### `backend/static/js/app-init.js`
+- Added `_bgStatusPollInterval` module-level variable.
+- Added `_startBgStatusPoll()` — idempotent; starts a 5-second `setInterval` calling `_bgPollTick`.
+- Added `_stopBgStatusPoll()` — clears the interval.
+- Added `_bgPollTick()` — iterates every active, non-bot, non-local match that isn't already in
+  the dedicated `_polling` path. Calls `GET /api/matches/:id/status`.
+  - `status === "complete"` → calls `completeMatch(myScore, oppScore, matchId)`
+  - HTTP 404 → calls `_removeActiveMatch()`, navigates away from MATCH screen with toast
+- `_startBgStatusPoll()` called inside `restoreSession()` when matches are restored from localStorage.
+
+### `backend/static/js/match/match-state.js`
+- `startMatch()` — calls `_startBgStatusPoll()` alongside `_connectMatchSocket()` for server matches.
+- `completeMatch()` — captures `wasDisplayed = (mid === STATE.currentMatchId)` **before** calling
+  `_removeActiveMatch()` (which may reassign `STATE.currentMatchId`). Fixes pre-existing logic bug
+  where the UI overlay was never shown because the guard check ran after the ID was changed.
+- `completeMatch()` — restarts bg poller after completion if other server matches remain active.
+
+**Design decisions:**
+- 5-second poll interval — light server load, acceptably fast UX.
+- Skips `ms._polling` matches — avoids double-polling with `total-mode.js`'s 2-second loop.
+- Skips bot/local matches — no server endpoint for those.
+- Poller stops automatically when no eligible matches remain.
+- On 404 exit: navigates to next active match if available, otherwise to `list-challenge` screen.
+
+**Status:** ✅ Fixed
