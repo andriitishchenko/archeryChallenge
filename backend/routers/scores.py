@@ -331,10 +331,22 @@ def submit_score(
         _resolve_total_match(match, db)
 
     db.refresh(match)
+
+    # Detect tiebreak: both players submitted with equal scores (match stays active)
+    human = [p for p in match.participants if not p.is_bot]
+    all_submitted_now = all(p.submitted_at is not None for p in human)
+    tiebreak = (
+        all_submitted_now
+        and match.status != "complete"
+        and len(human) == 2
+        and human[0].final_score is not None
+        and human[0].final_score == human[1].final_score
+    )
+
     return {
         "status": "submitted",
         "match_complete": match.status == "complete",
-        "tiebreak_required": getattr(match, "_tiebreak", False),
+        "tiebreak_required": tiebreak,
     }
 
 
@@ -630,3 +642,34 @@ def _match_to_out(match: Match, db: Session) -> MatchOut:
         created_at=match.created_at,
         completed_at=match.completed_at,
     )
+
+
+# ── Forfeit endpoint ──────────────────────────────────────────────────────────
+
+@router.post("/matches/{match_id}/forfeit", status_code=200)
+def forfeit_match(
+    match_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Forfeit a match. The calling player receives a loss; the opponent receives a win.
+    The match is immediately marked complete.
+    """
+    match = _load_match(match_id, db)
+
+    if match.status == "complete":
+        raise HTTPException(status_code=400, detail="Match already completed")
+
+    me  = _get_participant(match, current_user.id)
+    opp = _get_opponent(match, current_user.id)
+
+    me.result = MatchResultEnum.loss
+    if opp:
+        opp.result = MatchResultEnum.win
+
+    match.status       = "complete"
+    match.completed_at = datetime.utcnow()
+    db.commit()
+
+    return {"status": "forfeited", "match_id": match_id}

@@ -20,6 +20,7 @@ from models.models import (
     User, Challenge, Match, MatchParticipant,
     MatchTypeEnum, ScoringEnum
 )
+from ws.manager import manager
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
 
@@ -195,7 +196,7 @@ def delete_challenge(
 
 
 @router.post("/{challenge_id}/join", response_model=JoinResponse)
-def join_challenge(
+async def join_challenge(
     challenge_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -223,6 +224,17 @@ def join_challenge(
         ch.is_active = False
 
     db.commit()
+
+    # Push opponent_joined to the creator's active WS so they get the real match_id
+    # and can reconnect their socket + start submitting scores.
+    joiner_name = current_user.profile.name if current_user.profile else "Opponent"
+    creator_id  = ch.creator_id
+    await manager.notify_user(creator_id, {
+        "type": "opponent_joined",
+        "match_id": match_id,
+        "opponent_name": joiner_name,
+    })
+
     return JoinResponse(match_id=match_id, challenge_id=ch.id, message="Joined successfully")
 
 

@@ -18,6 +18,8 @@ class ConnectionManager:
     def __init__(self):
         # match_id -> list[WebSocket]
         self._match_connections: Dict[str, List[WebSocket]] = defaultdict(list)
+        # user_id -> WebSocket  (latest active match socket for that user)
+        self._user_sockets: Dict[str, WebSocket] = {}
         # user_id -> {ws, filters, profile, joined_at}
         self._matchmaking_queue: Dict[str, dict] = {}
         # user_id -> WebSocket
@@ -28,11 +30,23 @@ class ConnectionManager:
     def register_match(self, match_id: str, ws: WebSocket, user_id: str):
         """Register an already-accepted WebSocket for a live match."""
         self._match_connections[match_id].append(ws)
+        # Track user → ws so REST endpoints can push notifications
+        self._user_sockets[user_id] = ws
 
     def disconnect_match(self, match_id: str, ws: WebSocket):
         conns = self._match_connections.get(match_id, [])
         if ws in conns:
             conns.remove(ws)
+        # Remove from user_sockets if it matches
+        dead = [uid for uid, w in self._user_sockets.items() if w is ws]
+        for uid in dead:
+            del self._user_sockets[uid]
+
+    async def notify_user(self, user_id: str, message: dict):
+        """Push a message to a specific user's active match WebSocket (if connected)."""
+        ws = self._user_sockets.get(user_id)
+        if ws:
+            await self.send_personal(ws, message)
 
     async def broadcast_match(
         self, match_id: str, message: dict, exclude: Optional[WebSocket] = None
