@@ -7,6 +7,7 @@ Challenge endpoints:
   DELETE /api/challenges/{id}         — delete my challenge
   POST   /api/challenges/{id}/join    — join a challenge (creates a Match)
 """
+import asyncio
 import uuid
 from datetime import datetime
 from typing import Optional, List
@@ -62,6 +63,12 @@ class JoinResponse(BaseModel):
     match_id: str
     challenge_id: str
     message: str
+    # Challenge fields needed by the client to render the match correctly
+    scoring: str
+    distance: str
+    arrow_count: Optional[int]
+    creator_name: str
+    match_type: str
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -145,7 +152,7 @@ def get_challenge(challenge_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ChallengeOut)
-def create_challenge(
+async def create_challenge(
     req: ChallengeCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -172,11 +179,21 @@ def create_challenge(
     db.refresh(challenge)
 
     ch = _load_challenge(challenge.id, db)
-    return _challenge_to_out(ch)
+    out = _challenge_to_out(ch)
+
+    # Broadcast to all clients watching the challenge list feed.
+    # Private challenges are never shown in the public list.
+    if not challenge.is_private:
+        asyncio.ensure_future(manager.broadcast_challenge_event({
+            "type": "new_challenge",
+            "challenge": out,
+        }))
+
+    return out
 
 
 @router.delete("/{challenge_id}", status_code=204)
-def delete_challenge(
+async def delete_challenge(
     challenge_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -185,14 +202,32 @@ def delete_challenge(
     if ch.creator_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your challenge")
 
+    # Refuse deletion if any linked match is still active with both participants joined
+    for m in ch.matches:
+        if m.status != "complete" and len(m.participants) >= 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete — a match is in progress. Wait for it to complete or forfeit first."
+            )
+
     # Null out challenge_id on linked matches before deleting the challenge.
     # This satisfies the FK constraint while preserving match history rows.
     for match in ch.matches:
         match.challenge_id = None
     db.flush()
 
+    ch_id = ch.id
+    was_public = not ch.is_private
+
     db.delete(ch)
     db.commit()
+
+    # Notify all clients watching the public list
+    if was_public:
+        asyncio.ensure_future(manager.broadcast_challenge_event({
+            "type": "challenge_removed",
+            "challenge_id": ch_id,
+        }))
 
 
 @router.post("/{challenge_id}/join", response_model=JoinResponse)
@@ -220,13 +255,23 @@ async def join_challenge(
 
     # Live/async challenges become inactive after first join.
     # Private challenges stay active so the creator can reshare the link.
+    became_inactive = False
     if ch.match_type in (MatchTypeEnum.live, MatchTypeEnum.async_):
         ch.is_active = False
+        became_inactive = not ch.is_private
 
     db.commit()
 
-    # Push opponent_joined to the creator's active WS so they get the real match_id
-    # and can reconnect their socket + start submitting scores.
+    # Broadcast removal to challenge list feed if challenge is now inactive
+    if became_inactive:
+        asyncio.ensure_future(manager.broadcast_challenge_event({
+            "type": "challenge_removed",
+            "challenge_id": ch.id,
+        }))
+
+    # Push opponent_joined to the creator's waiting WS (registered via
+    # /ws/challenge/{id}/wait) so they receive the real match_id and can
+    # transition from the waiting state to the active match screen.
     joiner_name = current_user.profile.name if current_user.profile else "Opponent"
     creator_id  = ch.creator_id
     await manager.notify_user(creator_id, {
@@ -235,7 +280,16 @@ async def join_challenge(
         "opponent_name": joiner_name,
     })
 
-    return JoinResponse(match_id=match_id, challenge_id=ch.id, message="Joined successfully")
+    return JoinResponse(
+        match_id=match_id,
+        challenge_id=ch.id,
+        message="Joined successfully",
+        scoring=ch.scoring.value,
+        distance=ch.distance,
+        arrow_count=ch.arrow_count,
+        creator_name=ch.creator.profile.name if ch.creator.profile else "Opponent",
+        match_type=ch.match_type.value,
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

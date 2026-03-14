@@ -305,6 +305,42 @@ function _connectMatchSocket(matchId) {
           if (isActive) showToast('Opponent disconnected', 'error');
           break;
 
+        case 'rematch_proposed':
+          // Opponent wants a rematch — show the accept/decline panel
+          if (isActive) {
+            _showRematchRequest(matchId, msg.proposed_by || targetMs.oppName);
+          } else {
+            showToast(`${msg.proposed_by || targetMs.oppName} wants a rematch!`, 'info');
+          }
+          break;
+
+        case 'rematch_accepted': {
+          // Our rematch was accepted — launch the new match
+          const pendingEl = document.getElementById('rematch-pending');
+          if (pendingEl) pendingEl.classList.add('hidden');
+          _launchRematchMatch({
+            new_match_id:    msg.match_id,
+            new_challenge_id: msg.challenge_id,
+            opponent_name:   msg.opponent_name || targetMs.oppName,
+            scoring:         msg.scoring,
+            distance:        msg.distance,
+            arrow_count:     msg.arrow_count,
+            match_type:      msg.match_type,
+          }, targetMs);
+          break;
+        }
+
+        case 'rematch_declined':
+          // Opponent declined — restore action buttons, show toast
+          if (isActive) {
+            const pendingEl = document.getElementById('rematch-pending');
+            const actionsEl = document.getElementById('complete-actions');
+            if (pendingEl) pendingEl.classList.add('hidden');
+            if (actionsEl) actionsEl.classList.remove('hidden');
+            showToast(`${msg.declined_by || targetMs.oppName} declined the rematch`, 'info');
+          }
+          break;
+
         case 'pong':
           break;
       }
@@ -338,17 +374,6 @@ function _onOpponentArrow(arrowIndex, value) {
     indicator.classList.remove('active');
     indicator.textContent = `${ms.oppName} is shooting…`;
   }, 2500);
-}
-
-function _onOpponentRowComplete(row, rowTotal, arrows) {
-  const ms = STATE.matchState;
-  if (!ms) return;
-  showToast(`${ms.oppName}: row ${row + 1} = ${rowTotal}`, 'info');
-  const indicator = document.getElementById('opp-live-indicator');
-  if (indicator) {
-    indicator.classList.remove('hidden');
-    indicator.textContent = `${ms.oppName} row ${row + 1}: ${arrows.join('  ')} = ${rowTotal}`;
-  }
 }
 
 function _showOppSetArrows(oppTotal, arrows) {

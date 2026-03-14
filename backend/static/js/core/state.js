@@ -49,7 +49,6 @@ Object.defineProperty(STATE, 'matchState', {
 //    modules can read arrowValues without circular imports) ───────────────────
 let activeArrowIndex = 0;
 let arrowValues      = [];
-let findingTimer     = null;
 
 // ── WebSocket maps ────────────────────────────────────────────────────────────
 // matchSockets: { [matchId]: WebSocket }  — owned by match/websocket.js

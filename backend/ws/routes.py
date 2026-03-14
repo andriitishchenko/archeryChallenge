@@ -1,7 +1,9 @@
 """
 WebSocket endpoints:
-  WS /ws/match/{match_id}?token=...   — live match real-time updates
-  WS /ws/matchmaking?token=...        — matchmaking queue
+  WS /ws/match/{match_id}?token=...              — live match real-time updates
+  WS /ws/matchmaking?token=...                   — matchmaking queue
+  WS /ws/challenges?token=...                    — public challenge list feed
+  WS /ws/challenge/{challenge_id}/wait?token=... — creator waits for opponent
 """
 import json
 from typing import Optional
@@ -33,19 +35,19 @@ async def ws_match(
     """
     Live match WebSocket. Used for real-time arrow display and set/match notifications.
 
-    Client → server:
+    Client -> server:
       {"type": "ping"}
-      {"type": "arrow",          "arrow_index": N, "value": V}      ← live preview only
-      {"type": "set_submitted",  "set_number": N}                   ← I just submitted a set
-      {"type": "score_submitted"}                                    ← I submitted all arrows (total)
-      {"type": "tiebreak_submitted", "set_number": 0}               ← sudden-death submitted
+      {"type": "arrow",              "arrow_index": N, "value": V}
+      {"type": "set_submitted",      "set_number": N}
+      {"type": "score_submitted"}
+      {"type": "tiebreak_submitted", "set_number": 0}
 
-    Server → client (broadcast to opponent):
+    Server -> client (broadcast to opponent):
       {"type": "pong"}
-      {"type": "opp_arrow",      "arrow_index": N, "value": V}      ← opponent real-time arrow
-      {"type": "opp_set_done",   "set_number": N}                   ← opponent submitted their set
-      {"type": "opp_score_done"}                                     ← opponent submitted total score
-      {"type": "opp_tiebreak_done"}                                  ← opponent submitted tiebreak
+      {"type": "opp_arrow",          "arrow_index": N, "value": V}
+      {"type": "opp_set_done",        "set_number": N}
+      {"type": "opp_score_done"}
+      {"type": "opp_tiebreak_done"}
       {"type": "opponent_disconnected"}
     """
     user_id = await _auth_and_accept(websocket, token)
@@ -68,7 +70,6 @@ async def ws_match(
                 await manager.send_personal(websocket, {"type": "pong"})
 
             elif t == "arrow":
-                # Live arrow preview — relay to opponent for real-time display
                 await manager.broadcast_match(match_id, {
                     "type": "opp_arrow",
                     "arrow_index": msg.get("arrow_index"),
@@ -76,14 +77,12 @@ async def ws_match(
                 }, exclude=websocket)
 
             elif t == "set_submitted":
-                # Notify opponent that I submitted my set so they know result is ready
                 await manager.broadcast_match(match_id, {
                     "type": "opp_set_done",
                     "set_number": msg.get("set_number"),
                 }, exclude=websocket)
 
             elif t == "score_submitted":
-                # Notify opponent that I submitted all arrows (total mode)
                 await manager.broadcast_match(match_id, {
                     "type": "opp_score_done",
                 }, exclude=websocket)
@@ -95,9 +94,74 @@ async def ws_match(
 
     except WebSocketDisconnect:
         manager.disconnect_match(match_id, websocket)
-        await manager.broadcast_match(match_id, {
-            "type": "opponent_disconnected",
-        })
+        await manager.broadcast_match(match_id, {"type": "opponent_disconnected"})
+
+
+@router.websocket("/ws/challenges")
+async def ws_challenges_feed(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+):
+    """
+    Public challenges feed — real-time updates for the challenge list screen.
+
+    Server -> client:
+      {"type": "new_challenge",     "challenge": {...}}
+      {"type": "challenge_removed", "challenge_id": "..."}
+      {"type": "pong"}
+    Client -> server:
+      {"type": "ping"}
+    """
+    user_id = await _auth_and_accept(websocket, token)
+    if not user_id:
+        return
+
+    manager.register_challenge_feed(websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") == "ping":
+                await manager.send_personal(websocket, {"type": "pong"})
+    except WebSocketDisconnect:
+        manager.unregister_challenge_feed(websocket)
+
+
+@router.websocket("/ws/challenge/{challenge_id}/wait")
+async def ws_challenge_wait(
+    websocket: WebSocket,
+    challenge_id: str,
+    token: Optional[str] = Query(None),
+):
+    """
+    Creator waits here after creating a live challenge.
+    Receives opponent_joined with the real match_id once someone joins.
+
+    Server -> client:
+      {"type": "opponent_joined", "match_id": "...", "opponent_name": "..."}
+      {"type": "pong"}
+    Client -> server:
+      {"type": "ping"}
+    """
+    user_id = await _auth_and_accept(websocket, token)
+    if not user_id:
+        return
+
+    manager.register_creator_waiting(challenge_id, user_id, websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") == "ping":
+                await manager.send_personal(websocket, {"type": "pong"})
+    except WebSocketDisconnect:
+        manager.unregister_creator_waiting(challenge_id, websocket)
 
 
 @router.websocket("/ws/matchmaking")
@@ -108,14 +172,14 @@ async def ws_matchmaking(
     """
     Matchmaking queue WebSocket.
 
-    Client → server:
+    Client -> server:
       {"type": "find",   "filters": {...}, "profile": {...}}
       {"type": "cancel"}
       {"type": "ping"}
 
-    Server → client:
-      {"type": "status",    "message": "..."}
-      {"type": "matched",   "match_id": "...", "opponent": {...}}
+    Server -> client:
+      {"type": "status",  "message": "..."}
+      {"type": "matched", "match_id": "...", "opponent": {...}}
       {"type": "cancelled"}
       {"type": "pong"}
     """

@@ -1,256 +1,228 @@
-# CLAUDE.md
+# ArrowMatch — CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Rules (non-negotiable)
+- Internal reasoning: English only
+- Code comments: English only
+- UI text: English only
+- All logic on backend; client calls REST API only
+- Mobile-first SPA; no framework (vanilla JS)
 
-## Project Overview
-
-ArrowMatch is an online archery challenge platform ("Chatroulette-style") where users connect in real time, compete, and record results. It supports guest users (persistent userID stored locally) and registered users (email/password authentication).
-
-## Language Requirements
-
-- **All internal reasoning must be in English**
-- **All code comments must be in English**
-- **All UI text and interfaces must be in English only**
-
-## Platform Requirements
-
-- Mobile browser first
-- UX optimized for mobile
-- Comfortable color palette
-- System must prevent data loss on page reload (localStorage, session restore, autosave)
-
-## Workflow of implementation
-
-- make a plan of implementation
-- implement features or Resolve issues
-- do regression testing
-- update instructions.md
-
-## Commands
-
-### Development
+## Dev server
 ```bash
-cd backend
-
-# Create virtual environment (first time)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run development server
+cd backend && source venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# UI: http://localhost:8000/   API docs: http://localhost:8000/docs
 ```
 
-### Testing
-No automated tests are present. Manual testing via the frontend UI at `http://localhost:8000/`.
+## Stack
+| Layer | Tech |
+|---|---|
+| Backend | FastAPI + SQLAlchemy + SQLite (→ PostgreSQL via DATABASE_URL) |
+| Auth | JWT (access + refresh). Tokens in localStorage. |
+| Realtime | WebSocket via `ws/manager.py` singleton |
+| Frontend | Vanilla JS modules loaded in `index.html` |
 
-### Database
-- SQLite by default (arrowmatch.db in backend directory)
-- No migrations — tables are created automatically on startup via `create_tables()`
-- For production: set `DATABASE_URL=postgresql://...`
+---
 
-## User Types
-
-1. **Guest**: Uses platform without registration. Receives persistent userID from server, stored locally for session restoration.
-2. **Registered User**: Email + password authentication. Same userID is kept if upgrading from guest.
-3. **Persistent Guest**: Guest whose userID is restored automatically without login.
-
-## Entry Flow
-
-- **First Visit**: Shows login form OR "Continue as Guest" button. Guest must complete profile in Settings scene.
-- **Returning User**: Automatic session restore → redirect to Main Window.
-- **Challenge Link**: If URL has `?c=<challenge_id>`, show challenge message and open Challenge scene.
-
-## Scenes
-
-1. **Settings**: Profile configuration. All fields required.
-   - Name/Nickname (text, required)
-   - Gender (Male/Female)
-   - Age (Under 18, 18–20, 21–49, 50+)
-   - Bow Type (Recurve, Compound, Barebow)
-   - Skill Level (Beginner, Skilled, Master)
-   - Country (dropdown, required)
-
-2. **List Challenge**: Public challenges waiting for opponents. Shows creator's profile info. Own challenges excluded. Join button.
-
-3. **New Challenge**: Create challenge with distance (18m–90m), scoring type, arrow count, invite message, deadline, private mode.
-
-4. **My Challenges**: User's own challenges. Can delete or copy private link.
-
-5. **Challenge (Score Input)**: Enter shooting results. Values entered 3 per row, auto-focus to next field.
-   - Buttons: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, DEL
-
-6. **Challenge History**: Previous matches with results.
-
-## Match Types
-
-1. **Live**: Real-time competition via WebSocket
-2. **Asynchronous**: Players submit results independently with deadline
-3. **Scheduled**: Deadline set for result submission (23:59:59 of selected date)
-4. **Private**: Link-only access ("I challenge you" mode). Can be reshared by creator. Not listed in "Open Challenges".
-
-## Scoring Modes
-
-### Total Score
-- Specify number of arrows (3–360)
-- Submit all arrows at once
-- Server resolves when both players submit
-- Tie → sudden-death tiebreak (1 arrow, closest to center wins)
-
-### Set System
-- 3 arrows per set
-- 2 points for set win, 1 point each for tie
-- First to 6 points wins
-- Submit set by set via `POST /api/matches/{id}/set`
-- 6–6 tie → sudden-death tiebreak (set_number=0, 1 arrow)
-
-## Matchmaking
-
-- **Find Opponent**: Random matching with optional filters
-- Filters (all selected by default = no restrictions):
-  - Skill Level (Beginner, Skilled, Master) — multiple selection
-  - Gender (Male, Female)
-  - Bow Type (Recurve, Compound, Barebow)
-  - Age (Under 18, 18–20, 21–49, 50+)
-  - Distance (18m–90m)
-  - Country (dropdown, empty = any)
-- **Bot Opponents**: If no real users available, bot spawned after `BOT_WAIT_SECONDS` (default 8s). Bot score ≈ user average ±10%. Bot flag never sent to client — users should believe they're playing a real opponent.
-
-## Rating & Achievements
-
-### Rating System
-- Based on last 10 matches
-- Metrics: average score, wins/losses, global ranking by bow type
-- Global ranking based on number of matches won
-
-### Achievement Badges (displayed on homepage)
-- Win Streak: 5, 10, 25 wins in a row
-- Participation: 10, 50, 100 matches played
-
-## Architecture
-
-### Backend (FastAPI)
+## File map
 
 ```
 backend/
-├── main.py              # FastAPI app entry, serves frontend, health check
-├── core/
-│   ├── config.py        # Settings class (env vars, defaults)
-│   ├── deps.py          # FastAPI dependencies (auth, rate limiting)
-│   └── security.py      # Password hashing (bcrypt), JWT tokens
-├── models/
-│   ├── database.py      # SQLAlchemy engine, session factory
-│   └── models.py        # ORM models (User, Profile, Challenge, Match, etc.)
-├── routers/
-│   ├── auth.py          # /api/guest, /api/auth/* (login, register, refresh)
-│   ├── profile.py       # /api/profile/*
-│   ├── challenges.py    # /api/challenges/* (create, join, list, delete)
-│   └── scores.py        # /api/matches/*, /api/history, /api/ranking, /api/achievements
-├── ws/
-│   ├── manager.py       # WebSocket connection manager (matchmaking, live match)
-│   └── routes.py        # WebSocket endpoints (/ws/match/{id}, /ws/matchmaking)
-├── bots/
-│   └── generator.py     # Bot profile/score generation (±10% of user average)
-└── static/
-    ├── index.html       # Frontend SPA
-    ├── app.js           # Frontend logic (state management, API calls, WebSocket)
-    └── styles.css       # Styling
+  main.py                   # app entry, serves /static, /health
+  core/config.py            # Settings (env vars, BOT_WAIT_SECONDS, DEBUG)
+  core/deps.py              # get_db, get_current_user
+  core/security.py          # JWT, bcrypt (72-byte truncation)
+  models/models.py          # ORM models + enums
+  models/database.py        # engine, SessionLocal, create_tables(), _migrate()
+  routers/auth.py           # /api/guest  /api/auth/*
+  routers/profile.py        # /api/profile/*
+  routers/challenges.py     # /api/challenges/*
+  routers/scores.py         # /api/matches/*  /api/history  /api/ranking  /api/achievements
+  ws/manager.py             # ConnectionManager singleton (match/feed/wait/matchmaking sockets)
+  ws/routes.py              # WS endpoints
+  bots/generator.py         # bot profile + score generation (±10%)
+  static/index.html         # SPA shell (loads 14 JS modules in order)
+  static/css/styles.css
+  static/js/
+    app-init.js             # init, restoreSession, showScene, _bgPollTick, _restoreActiveMatchesFromServer
+    core/state.js           # STATE object, matchSockets map, WS_BASE, API_BASE
+    core/api.js             # api(), ApiError (handles 401 refresh)
+    core/utils.js           # showToast, escHtml, getTimeAgo, copyToClipboard
+    match/bot.js            # generateBotOpponent, generateMockChallenges
+    match/score-input.js    # renderMatchScene, numpad handlers, arrow cells
+    match/set-mode.js       # resolveSet, _applySetResult, resolveTiebreak
+    match/total-mode.js     # checkTotalComplete, _pollForResult
+    match/match-state.js    # startMatch, completeMatch, forfeitMatch→_forfeitAndExit,
+                            # switchToMatch, proposeRematch, acceptRematch, declineRematch
+    match/websocket.js      # _connectMatchSocket, _scheduleBotFallback,
+                            # _openCreatorWaitSocket, connectChallengeFeed, findOpponent
+    screens/auth.js         # handleGuest, handleLogin, handleRegister, handleLogout
+    screens/challenges.js   # refreshChallengeList, joinChallenge, createChallenge,
+                            # refreshMyChallenges, deleteChallenge, handleChallengeLink
+    screens/settings.js     # refreshSettings, saveSettings
+    screens/history.js      # saveToHistory, refreshHistory
 ```
 
-### Frontend
+---
 
-Single-page application (vanilla JS, CSS). No framework. Served by FastAPI at `/`.
-
-**State management**: Global `STATE` object stored in localStorage for offline resilience and session restoration.
-
-### Data Model
+## Data model
 
 ```
-User ─┬─< Profile (1:1)
-      └─< MatchParticipant >── Match ─── Challenge
-
-Match ──< MatchParticipant ──< ArrowScore
+users          id(PK) | email | hashed_password | is_guest | created_at | last_seen
+profiles       user_id(FK) | name | gender | age | bow_type | skill_level | country
+challenges     id | creator_id(FK) | match_type | scoring | distance | arrow_count |
+               invite_message | deadline | is_private | is_active | created_at
+matches        id | challenge_id(FK→NULL) | status | created_at | completed_at |
+               rematch_status | rematch_proposed_by
+match_participants  id | match_id(FK) | user_id(FK) | is_creator | is_bot |
+                    final_score | result | submitted_at
+arrow_scores   id | participant_id(FK) | arrow_index | value | set_number
 ```
 
-**Key entities**:
-- `User`: id (server-generated hash like `AM-xxx-xxx`), email, is_guest
-- `Profile`: name, gender, age, bow_type, skill_level, country
-- `Challenge`: match_type (live/async/scheduled/private), scoring (total/sets), distance, arrow_count
-- `Match`: status (waiting/active/complete), participants
-- `MatchParticipant`: user_id, is_creator, is_bot, final_score, result
-- `ArrowScore`: individual arrow values with set_number for set-system scoring
+### Enums
+```
+match_type:   live | async | scheduled | private
+scoring:      total | sets
+gender:       Male | Female
+age:          Under 18 | 18–20 | 21–49 | 50+
+bow_type:     Recurve | Compound | Barebow
+skill_level:  Beginner | Skilled | Master
+result:       win | loss | draw | pending
+match.status: waiting | active | complete
+rematch_status: null | proposed | accepted | declined
+```
 
-### Authentication Flow
+### Key constraints
+- `challenge_id` → SET NULL on delete (preserves match history)
+- `is_private=True` challenges excluded from public list; stay active after join
+- `match_type=live|async` → `is_active=False` after first join
+- `match_type=private` → stays active (creator can reshare)
+- Delete challenge blocked if any linked match has ≥2 participants and status≠complete
 
-1. **Guest**: `POST /api/guest` → returns `user_id` + tokens
-2. **Register**: `POST /api/auth/register` (can upgrade guest by passing `existing_user_id`)
-3. **Login**: `POST /api/auth/login`
-4. **Refresh**: `POST /api/auth/refresh`
+---
 
-Tokens stored in localStorage: `arrowmatch_access_token`, `arrowmatch_refresh_token`.
+## API contract
 
-### WebSocket Protocol
+### Auth
+```
+POST /api/guest                              → {user_id, access_token, refresh_token}
+POST /api/auth/register  {email,password}   → tokens
+POST /api/auth/login     {email,password}   → tokens
+POST /api/auth/refresh   {refresh_token}    → tokens
+GET  /api/auth/me                           → {user_id, email, is_guest}
+```
 
-**Matchmaking** (`/ws/matchmaking`):
-- Client → `{"type": "find", "filters": {...}, "profile": {...}}`
-- Server → `{"type": "matched", "match_id": "...", "opponent": {...}}`
-- If no real users available → bot spawned after `BOT_WAIT_SECONDS` (default 8s)
+### Profile
+```
+GET  /api/profile               → ProfileOut
+PUT  /api/profile  {name,…}     → ProfileOut
+GET  /api/profile/{user_id}     → ProfileOut
+```
 
-**Live Match** (`/ws/match/{match_id}`):
-- Client → `{"type": "arrow", "arrow_index": N, "value": V}` (real-time preview)
-- Server broadcasts `{"type": "opp_arrow", ...}` to opponent
-- Set submission, score submission, tiebreak notifications
+### Challenges
+```
+GET    /api/challenges?skill=&gender=&bow=&dist=&country=  → [ChallengeOut]  # excludes own
+POST   /api/challenges  {match_type,scoring,distance,arrow_count,…}  → ChallengeOut
+GET    /api/challenges/mine      → [ChallengeOut]
+GET    /api/challenges/{id}      → ChallengeOut          # no auth (private links)
+DELETE /api/challenges/{id}      → 204 | 400 if active match | 403 if not owner
+POST   /api/challenges/{id}/join → JoinResponse          # includes scoring,distance,arrow_count,creator_name,match_type
+```
 
-### Environment Variables
+### Matches
+```
+GET  /api/matches/mine/active          → [ActiveMatchOut]  # both creator + joiner
+GET  /api/matches/{id}                 → MatchOut
+GET  /api/matches/{id}/status          → MatchStatusOut
+POST /api/matches/{id}/set    {set_number,arrows:[]}  → SetResult
+POST /api/matches/{id}/score  {arrows:[{arrow_index,value}]}  → {status,match_complete,tiebreak_required}
+POST /api/matches/{id}/forfeit         → {status,match_id}
+POST /api/matches/{id}/rematch         → RematchOut  # proposes; WS push to opponent
+POST /api/matches/{id}/rematch/accept  → RematchOut  # creates new match; WS push to proposer
+POST /api/matches/{id}/rematch/decline → RematchOut  # WS push to proposer
+```
 
-See `backend/.env.example`:
-- `SECRET_KEY` — JWT signing (change in production!)
-- `DATABASE_URL` — SQLite default or PostgreSQL
-- `CORS_ORIGINS` — comma-separated frontend origins
-- `AUTH_RATE_LIMIT`, `AUTH_RATE_WINDOW` — rate limiting
-- `BOT_WAIT_SECONDS` — delay before spawning bot opponent
-- `DEBUG=true` — enables `/docs` and `/redoc`
+### Stats
+```
+GET /api/history            → [HistoryItem]
+GET /api/ranking?bow_type=  → [RankingEntry]
+GET /api/achievements       → [AchievementItem]
+```
 
-## Important Patterns
+---
 
-### Password Handling
-Backend uses `bcrypt` directly (not passlib) with explicit 72-byte truncation. See `core/security.py`.
+## WebSocket protocol
 
-### WebSocket Accept Order
-**Critical**: WebSocket must be `accept()`ed before any send/close. Routes in `ws/routes.py` call `await websocket.accept()` before delegating to the manager.
+### `/ws/match/{match_id}?token=`
+Handles live per-match events. `register_match()` also stores in `_user_sockets[user_id]`.
 
-### Challenge Deletion
-When deleting a Challenge, linked Matches must have their `challenge_id` set to NULL (not cascade delete) to preserve match history. See `routers/challenges.py:delete_challenge`.
+Client→Server: `ping` | `arrow {arrow_index,value}` | `set_submitted {set_number}` | `score_submitted` | `tiebreak_submitted`
 
-### Private Challenges
-Private challenges (`is_private=True`) are not listed in public `/api/challenges`. Accessible only via direct link with challenge ID. Stay active after join so creator can reshare.
+Server→Client: `pong` | `opp_arrow` | `opp_set_done` | `opp_score_done` | `opp_tiebreak_done` | `opponent_disconnected` | `opponent_forfeited` | `rematch_proposed {match_id,challenge_id,proposed_by,scoring,distance,arrow_count,match_type}` | `rematch_accepted {match_id,challenge_id,opponent_name,…}` | `rematch_declined {match_id,declined_by}`
 
-### Bot Score Generation
-Bot scores are calibrated to ±10% of user's reference score. Users never see bot flag — `is_bot` stripped in `_safe_profile()`. See `bots/generator.py`.
+### `/ws/challenge/{challenge_id}/wait?token=`
+Creator waits for opponent after creating a live challenge. Registers in `_user_sockets`.
 
-### Frontend Match Restoration
-On page reload, `STATE.matchState` is restored from localStorage. If a match was in progress, the Challenge scene restores it automatically.
+Server→Client: `opponent_joined {match_id,opponent_name}` | `pong`
 
-## Security Checklist
+### `/ws/challenges?token=`
+Public feed. All authenticated clients subscribe on login.
 
-Code must be checked for:
-- Authentication vulnerabilities
-- Injection attacks (SQL injection, XSS)
-- Session hijacking
-- WebSocket abuse
+Server→Client: `new_challenge {challenge}` | `challenge_removed {challenge_id}` | `pong`
 
-## Resolved Issues (Task History)
+### `/ws/matchmaking?token=`
+Client→Server: `find {filters,profile}` | `cancel` | `ping`
 
-1. **Arrowmatch.html → index.html**: Served at root `/`.
-2. **Password bcrypt truncation**: Passwords truncated to 72 bytes before hashing (see `core/security.py`).
-3. **WebSocket accept order**: `ws.accept()` called before any send/close in `ws/routes.py`.
-4. **Achievements from server**: `GET /api/achievements` returns badge status calculated server-side.
-5. **Own challenges hidden**: List Challenge screen excludes current user's own challenges.
-6. **Challenge deletion cascade**: Matches have `challenge_id` set to NULL to preserve history.
-7. **Private challenges**: Not shown in "Open Challenges"; accessible via link only; copy link button in "My Challenges".
-8. **Bot delay**: Bots connect after `BOT_WAIT_SECONDS` (configurable, default 8s).
-9. **Set System scoring**: Server waits for both players to submit each set, then resolves winner.
-10. **Total Score tiebreak**: Equal scores trigger sudden-death (1 arrow) via `set_number=0`.
-11. **CSS/JS split**: Properly separated into `styles.css` and `app.js`.
+Server→Client: `status {message}` | `matched {match_id,opponent}` | `cancelled` | `pong`
+
+---
+
+## Key invariants (check before every change)
+
+**Backend**
+- Route handlers that call `asyncio.ensure_future()` or `await` must be `async def`
+- `notify_user(user_id)` delivers via `_user_sockets[user_id]` — user must have an open WS (match, wait, or matchmaking socket)
+- `broadcast_challenge_event()` targets `_challenge_feed` list (all subscribers of `/ws/challenges`)
+- DB migrations: additive only, run in `_migrate()` at startup, guarded by PRAGMA table_info check
+- JoinResponse must return: `match_id, challenge_id, scoring, distance, arrow_count, creator_name, match_type`
+
+**Frontend**
+- `STATE.activeMatches[matchId]` is the single source of truth for in-progress matches
+- Page reload: `_restoreActiveMatchesFromServer()` fetches `/api/matches/mine/active`, rebuilds state, re-opens WS sockets
+- `startMatch(challenge)` requires: `id, matchId (optional), name, scoring, distance, arrowCount`; opens WS only if `matchId && !isBot`
+- `joinChallenge()` uses fields from `JoinResponse` directly — never falls back to `STATE.challenges` lookup in success path
+- `completeMatch()` captures `wasDisplayed` BEFORE calling `_removeActiveMatch()` which reassigns `currentMatchId`
+- Forfeit: `_forfeitAndExit()` → removes match → `showScene('my-challenges')` (no result overlay)
+- Feed WS (`connectChallengeFeed`): auto-reconnects after 5s on unexpected close; filters via `_challengePassesFilters()`
+- `proposeRematch/acceptRematch/declineRematch` → REST only, no local logic
+
+**Scoring**
+- Total mode: client polls `GET /api/matches/{id}/status` every 2s after submit; bg poll every 5s for non-submitting matches
+- Set mode: server resolves set when both players submit same `set_number`; returns `SetResult`; first to 6 pts wins
+- Tiebreak (both): sudden-death 1 arrow via `POST /api/matches/{id}/set` with `set_number=0`
+- Bot: score generated server-side in matchmaking; `is_bot` never sent to client
+
+---
+
+## localStorage keys
+```
+arrowmatch_userid           user ID
+arrowmatch_access_token     JWT access token
+arrowmatch_refresh_token    JWT refresh token
+arrowmatch_user             {email, is_guest}
+arrowmatch_profile          profile object
+arrowmatch_active_matches   {matchId: matchState} — arrow values for reload merge
+arrowmatch_my_challenges    creator's challenge list cache
+arrowmatch_history          match history cache
+```
+
+## Environment variables (backend/.env)
+```
+SECRET_KEY          JWT signing key (required in production)
+DATABASE_URL        sqlite:///./arrowmatch.db  |  postgresql://...
+CORS_ORIGINS        comma-separated origins
+BOT_WAIT_SECONDS    8 (seconds before bot spawns in matchmaking)
+DEBUG               true → enables /docs and /redoc
+AUTH_RATE_LIMIT     5
+AUTH_RATE_WINDOW    60
+```

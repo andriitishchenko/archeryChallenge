@@ -5,7 +5,6 @@ Profile endpoints:
   GET  /api/profile/{user_id} — get any user's public profile
 """
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator

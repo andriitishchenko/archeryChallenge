@@ -32,10 +32,12 @@ function startMatch(challenge, isCreator = false) {
   saveMatchState();
   _updateResumeTab();
   renderMatchScene();
+  _resetRematchUI();
   showScene('challenge');
 
   if (challenge.matchId && !challenge.isBot) {
     _connectMatchSocket(matchId);
+    _startBgStatusPoll(); // ensure background status monitoring is active
   }
   if (isCreator && !challenge.isBot && challenge.matchId) {
     _scheduleBotFallback(challenge);
@@ -147,19 +149,35 @@ async function forfeitMatch() {
 
   if (ms.isBot) {
     showToast('You forfeited. Better luck next time!', 'info');
-    completeMatch(0, 1, ms.id);
+    _forfeitAndExit(ms);
     return;
   }
 
   try {
     await api('POST', `/api/matches/${ms.id}/forfeit`);
-    showToast('You forfeited. You lose this one.', 'info');
-    completeMatch(0, 1, ms.id);
+    showToast('You forfeited. Better luck next time!', 'info');
+    _forfeitAndExit(ms);
   } catch (e) {
     showToast(e.message || 'Forfeit failed — try again', 'error');
     btn.textContent = '✕ Forfeit';
     btn.disabled    = false;
   }
+}
+
+/**
+ * Finalise a forfeited match: record the result, remove from active matches,
+ * close the waiting socket if open, and navigate to My Challenges.
+ */
+function _forfeitAndExit(ms) {
+  ms.complete      = true;
+  ms.myFinalScore  = 0;
+  ms.oppFinalScore = 1;
+
+  if (typeof closeCreatorWaitSocket === 'function') closeCreatorWaitSocket();
+
+  _removeActiveMatch(ms.id);
+  saveToHistory(ms);
+  showScene('my-challenges');
 }
 
 // ── Match completion ──────────────────────────────────────────────────────────
@@ -169,9 +187,13 @@ async function forfeitMatch() {
  * from currentMatchId) — in that case only state/history are updated, no UI overlay.
  */
 function completeMatch(myScore, oppScore, targetMatchId) {
-  const mid = targetMatchId || STATE.currentMatchId;
-  const ms  = STATE.activeMatches[mid];
+  const mid        = targetMatchId || STATE.currentMatchId;
+  const ms         = STATE.activeMatches[mid];
   if (!ms) return;
+
+  // Capture whether this is the displayed match BEFORE _removeActiveMatch
+  // reassigns STATE.currentMatchId to the next available match.
+  const wasDisplayed = (mid === STATE.currentMatchId);
 
   ms.complete      = true;
   ms.myFinalScore  = myScore;
@@ -180,8 +202,14 @@ function completeMatch(myScore, oppScore, targetMatchId) {
   _removeActiveMatch(mid);
   saveToHistory(ms);
 
+  // Restart background poller if other non-bot matches are still active
+  const hasMoreServerMatches = Object.values(STATE.activeMatches).some(
+    m => !m.complete && !m.isBot && m.id && !m.id.startsWith('local-')
+  );
+  if (hasMoreServerMatches) _startBgStatusPoll();
+
   // Only render result overlay for the currently displayed match
-  if (mid !== STATE.currentMatchId) return;
+  if (!wasDisplayed) return;
 
   if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
 
@@ -205,17 +233,136 @@ function completeMatch(myScore, oppScore, targetMatchId) {
   if (forfeitBtn) forfeitBtn.classList.add('hidden');
 }
 
-function startRematch() {
-  if (!STATE.matchState) return;
-  const prev = STATE.matchState;
+// ── Rematch flow ──────────────────────────────────────────────────────────────
+
+/**
+ * Called when the current user clicks "Rematch" after a completed match.
+ * POSTs to /api/matches/{id}/rematch — server creates a cloned challenge,
+ * pushes 'rematch_proposed' WS to opponent.
+ * Client shows a waiting state until opponent responds.
+ */
+async function proposeRematch() {
+  const ms = STATE.matchState;
+  if (!ms) return;
+
+  // Bot rematch: skip server, start immediately
+  if (ms.isBot) {
+    _startBotRematch(ms);
+    return;
+  }
+
+  const actionsEl  = document.getElementById('complete-actions');
+  const pendingEl  = document.getElementById('rematch-pending');
+  actionsEl.classList.add('hidden');
+  pendingEl.classList.remove('hidden');
+
+  try {
+    await api('POST', `/api/matches/${ms.id}/rematch`);
+    // Server pushes rematch_proposed to opponent via WS.
+    // We stay in the pending state until rematch_accepted or rematch_declined arrives.
+  } catch (e) {
+    showToast(e.message || 'Could not propose rematch', 'error');
+    actionsEl.classList.remove('hidden');
+    pendingEl.classList.add('hidden');
+  }
+}
+
+/**
+ * Called when the opponent clicks "Accept" on the rematch request panel.
+ * POSTs to /api/matches/{id}/rematch/accept — server creates the new match,
+ * returns new_match_id + challenge config, pushes 'rematch_accepted' to proposer.
+ */
+async function acceptRematch() {
+  const ms = STATE.matchState;
+  if (!ms) return;
+
+  const requestEl = document.getElementById('rematch-request');
+  requestEl.classList.add('hidden');
+
+  try {
+    const data = await api('POST', `/api/matches/${ms.id}/rematch/accept`);
+    if (data?.new_match_id) {
+      _launchRematchMatch(data, ms);
+    }
+  } catch (e) {
+    showToast(e.message || 'Could not accept rematch', 'error');
+    requestEl.classList.remove('hidden');
+  }
+}
+
+/**
+ * Called when the opponent clicks "Decline" on the rematch request panel.
+ */
+async function declineRematch() {
+  const ms = STATE.matchState;
+  if (!ms) return;
+
+  document.getElementById('rematch-request').classList.add('hidden');
+  document.getElementById('complete-actions').classList.remove('hidden');
+
+  try {
+    await api('POST', `/api/matches/${ms.id}/rematch/decline`);
+    showToast('Rematch declined', 'info');
+  } catch {}
+}
+
+/**
+ * Show the rematch-request panel to the opponent (called from WS handler).
+ * matchId = original match id, proposerName = who proposed it.
+ */
+function _showRematchRequest(matchId, proposerName) {
+  // Only relevant if the completed match is still displayed
+  const ms = STATE.activeMatches[matchId] || STATE.matchState;
+  if (!ms) return;
+
+  const requestEl  = document.getElementById('rematch-request');
+  const textEl     = document.getElementById('rematch-request-text');
+  const actionsEl  = document.getElementById('complete-actions');
+
+  if (!requestEl) return;
+
+  if (textEl) textEl.textContent = `${proposerName} wants a rematch!`;
+  actionsEl.classList.add('hidden');
+  requestEl.classList.remove('hidden');
+}
+
+/**
+ * Launch a new match from a rematch_accepted server response.
+ * @param {object} data  Server response with new_match_id, challenge config fields
+ * @param {object} prev  Previous match state (for scoring defaults)
+ */
+function _launchRematchMatch(data, prev) {
+  document.getElementById('match-complete').classList.add('hidden');
+  startMatch({
+    id:         data.new_challenge_id || `rematch-${Date.now()}`,
+    matchId:    data.new_match_id,
+    name:       data.opponent_name || prev.oppName,
+    scoring:    data.scoring       || prev.scoring,
+    distance:   data.distance      || prev.dist,
+    arrowCount: data.arrow_count   || prev.arrowCount,
+    match_type: data.match_type    || 'private',
+  });
+}
+
+/** Bot rematch — no server call needed. */
+function _startBotRematch(prev) {
   document.getElementById('match-complete').classList.add('hidden');
   startMatch({
     id:         `rematch-${Date.now()}`,
     name:       prev.oppName,
-    isBot:      prev.isBot,
+    isBot:      true,
     distance:   prev.dist,
     scoring:    prev.scoring,
     arrowCount: prev.arrowCount,
-    type:       'live',
   });
+}
+
+/** Reset rematch UI panels back to default after a new match starts. */
+function _resetRematchUI() {
+  const actionsEl = document.getElementById('complete-actions');
+  const pendingEl = document.getElementById('rematch-pending');
+  const requestEl = document.getElementById('rematch-request');
+  if (actionsEl) actionsEl.classList.remove('hidden');
+  if (pendingEl) pendingEl.classList.add('hidden');
+  if (requestEl) requestEl.classList.add('hidden');
 }

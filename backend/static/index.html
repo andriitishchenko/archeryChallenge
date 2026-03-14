@@ -442,9 +442,21 @@
             <div class="complete-icon" id="complete-icon">🏆</div>
             <h2 class="complete-title" id="complete-title">Match Complete</h2>
             <div class="complete-result" id="complete-result"></div>
-            <div class="complete-actions">
-              <button class="btn-primary" onclick="startRematch()">Rematch</button>
+            <!-- Primary actions (shown after completion) -->
+            <div class="complete-actions" id="complete-actions">
+              <button class="btn-primary" onclick="proposeRematch()">Rematch</button>
               <button class="btn-secondary" onclick="showScene('new-challenge')">New Challenge</button>
+            </div>
+            <!-- Rematch pending state (shown after proposer clicks Rematch) -->
+            <div class="complete-actions hidden" id="rematch-pending">
+              <p class="rematch-status-text">Waiting for opponent to accept…</p>
+              <button class="btn-secondary" onclick="showScene('my-challenges')">Back</button>
+            </div>
+            <!-- Rematch request received (shown to the opponent) -->
+            <div class="complete-actions hidden" id="rematch-request">
+              <p class="rematch-status-text" id="rematch-request-text">Opponent wants a rematch!</p>
+              <button class="btn-primary" onclick="acceptRematch()">Accept</button>
+              <button class="btn-secondary" onclick="declineRematch()">Decline</button>
             </div>
           </div>
         </div>

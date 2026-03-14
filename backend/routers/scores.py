@@ -13,6 +13,8 @@ Score endpoints:
 """
 from datetime import datetime
 from typing import List, Optional, Dict
+import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
@@ -22,11 +24,12 @@ from sqlalchemy.orm import Session, joinedload
 from core.deps import get_db, get_current_user
 from models.models import (
     User, Match, MatchParticipant, ArrowScore,
-    MatchResultEnum, Profile, Challenge, ScoringEnum
+    MatchResultEnum, Profile, Challenge, ScoringEnum,
+    MatchTypeEnum, Challenge
 )
+from ws.manager import manager
 
 router = APIRouter(prefix="/api", tags=["scores"])
-
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -49,7 +52,6 @@ class ArrowScoreItem(BaseModel):
             raise ValueError("Arrow index out of range")
         return v
 
-
 class SetSubmission(BaseModel):
     set_number: int      # 1-based set index; use 0 for tiebreak sudden-death
     arrows: List[int]    # exactly 3 values (or 1 for sudden-death)
@@ -64,7 +66,6 @@ class SetSubmission(BaseModel):
                 raise ValueError("Arrow score must be 0–10")
         return v
 
-
 class SetResult(BaseModel):
     set_number: int
     both_submitted: bool
@@ -77,10 +78,8 @@ class SetResult(BaseModel):
     match_winner: Optional[str]     # "me" | "opponent" | None
     tiebreak_required: bool         # True if sudden-death arrow needed
 
-
 class ScoreSubmission(BaseModel):
     arrows: List[ArrowScoreItem]
-
 
 class MatchStatusOut(BaseModel):
     id: str
@@ -97,7 +96,6 @@ class MatchStatusOut(BaseModel):
     current_set: int
     sets: List[Dict]                    # [{set_number, my_total, opp_total, winner}]
 
-
 class MatchParticipantOut(BaseModel):
     user_id: str
     name: str
@@ -106,7 +104,6 @@ class MatchParticipantOut(BaseModel):
     result: str
     submitted_at: Optional[datetime]
 
-
 class MatchOut(BaseModel):
     id: str
     challenge_id: Optional[str]
@@ -114,7 +111,6 @@ class MatchOut(BaseModel):
     participants: List[MatchParticipantOut]
     created_at: datetime
     completed_at: Optional[datetime]
-
 
 class HistoryItem(BaseModel):
     match_id: str
@@ -126,7 +122,6 @@ class HistoryItem(BaseModel):
     result: str
     date: datetime
 
-
 class RankingEntry(BaseModel):
     rank: int
     user_id: str
@@ -136,13 +131,11 @@ class RankingEntry(BaseModel):
     matches_played: int
     avg_score: float
 
-
 class AchievementItem(BaseModel):
     id: str
     icon: str
     label: str
     earned: bool
-
 
 # ── Set-system endpoint ───────────────────────────────────────────────────────
 
@@ -278,7 +271,6 @@ def submit_set(
         tiebreak_required=tiebreak,
     )
 
-
 # ── Total-score endpoint ──────────────────────────────────────────────────────
 
 @router.post("/matches/{match_id}/score", status_code=200)
@@ -348,7 +340,6 @@ def submit_score(
         "match_complete": match.status == "complete",
         "tiebreak_required": tiebreak,
     }
-
 
 # ── Match status polling ──────────────────────────────────────────────────────
 
@@ -422,7 +413,6 @@ def get_match_status(
         sets=sets_out,
     )
 
-
 @router.get("/matches/{match_id}", response_model=MatchOut)
 def get_match(
     match_id: str,
@@ -433,7 +423,6 @@ def get_match(
     if not any(p.user_id == current_user.id for p in match.participants):
         raise HTTPException(status_code=403, detail="Not your match")
     return _match_to_out(match, db)
-
 
 # ── History & ranking ─────────────────────────────────────────────────────────
 
@@ -473,7 +462,6 @@ def get_history(
             date=p.submitted_at or match.created_at,
         ))
     return result
-
 
 @router.get("/ranking", response_model=List[RankingEntry])
 def get_ranking(
@@ -522,7 +510,6 @@ def get_ranking(
         ))
     return result
 
-
 @router.get("/achievements", response_model=List[AchievementItem])
 def get_achievements(
     current_user: User = Depends(get_current_user),
@@ -560,7 +547,6 @@ def get_achievements(
         for bid, icon, label, earned in badge_defs
     ]
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_match(match_id: str, db: Session) -> Match:
@@ -577,23 +563,19 @@ def _load_match(match_id: str, db: Session) -> Match:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
 
-
 def _get_participant(match: Match, user_id: str) -> MatchParticipant:
     p = next((p for p in match.participants if p.user_id == user_id), None)
     if not p:
         raise HTTPException(status_code=403, detail="You are not part of this match")
     return p
 
-
 def _get_opponent(match: Match, user_id: str) -> Optional[MatchParticipant]:
     return next((p for p in match.participants if p.user_id != user_id), None)
-
 
 def _count_set_points(participant_id: str, match_id: str, db: Session) -> int:
     """Sum the participant's final_score which stores accumulated set points."""
     p = db.query(MatchParticipant).filter(MatchParticipant.id == participant_id).first()
     return p.final_score or 0
-
 
 def _resolve_total_match(match: Match, db: Session):
     """Determine win/loss/draw for total-score mode. Tie stays active for sudden-death."""
@@ -620,7 +602,6 @@ def _resolve_total_match(match: Match, db: Session):
     match.completed_at = datetime.utcnow()
     db.commit()
 
-
 def _match_to_out(match: Match, db: Session) -> MatchOut:
     participants_out = []
     for p in match.participants:
@@ -642,7 +623,6 @@ def _match_to_out(match: Match, db: Session) -> MatchOut:
         created_at=match.created_at,
         completed_at=match.completed_at,
     )
-
 
 # ── Forfeit endpoint ──────────────────────────────────────────────────────────
 
@@ -673,3 +653,234 @@ def forfeit_match(
     db.commit()
 
     return {"status": "forfeited", "match_id": match_id}
+
+# ── Active matches ────────────────────────────────────────────────────────────
+
+class ActiveMatchOut(BaseModel):
+    match_id: str
+    challenge_id: Optional[str]
+    opponent_name: str
+    opponent_id: str
+    scoring: str
+    distance: str
+    arrow_count: Optional[int]
+    match_type: str
+    is_creator: bool
+
+@router.get("/matches/mine/active", response_model=List[ActiveMatchOut])
+def get_my_active_matches(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return all non-complete matches the current user is a participant in.
+    Used on page reload to rebuild client-side activeMatches state from server truth.
+    Also drives the 'My Challenges' resume button for both creator and joiner.
+    """
+    participants = (
+        db.query(MatchParticipant)
+        .filter(
+            MatchParticipant.user_id == current_user.id,
+            MatchParticipant.is_bot == False,
+        )
+        .all()
+    )
+
+    result = []
+    for p in participants:
+        match = _load_match(p.match_id, db)
+        if match.status == "complete":
+            continue
+
+        opp = _get_opponent(match, current_user.id)
+        if not opp:
+            continue
+
+        opp_profile = db.query(Profile).filter(Profile.user_id == opp.user_id).first()
+        ch = match.challenge
+
+        result.append(ActiveMatchOut(
+            match_id=match.id,
+            challenge_id=match.challenge_id,
+            opponent_name=opp_profile.name if opp_profile else "Opponent",
+            opponent_id=opp.user_id,
+            scoring=ch.scoring.value if ch else "total",
+            distance=ch.distance if ch else "30m",
+            arrow_count=ch.arrow_count if ch else 18,
+            match_type=ch.match_type.value if ch else "live",
+            is_creator=p.is_creator,
+        ))
+
+    return result
+
+# ── Rematch endpoints ─────────────────────────────────────────────────────────
+
+class RematchOut(BaseModel):
+    status: str          # "proposed" | "accepted" | "declined"
+    new_match_id: Optional[str] = None
+    new_challenge_id: Optional[str] = None
+
+@router.post("/matches/{match_id}/rematch", response_model=RematchOut)
+async def propose_rematch(
+    match_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Propose a rematch after a completed match.
+    Creates a new Challenge (same config) and pushes 'rematch_proposed' WS event to opponent.
+    """
+
+    match = _load_match(match_id, db)
+    if match.status != "complete":
+        raise HTTPException(status_code=400, detail="Match is not complete yet")
+
+    me = _get_participant(match, current_user.id)
+    opp = _get_opponent(match, current_user.id)
+    if not opp:
+        raise HTTPException(status_code=400, detail="No opponent to rematch")
+
+    if match.rematch_status == "proposed":
+        raise HTTPException(status_code=400, detail="Rematch already proposed")
+
+    # Clone the original challenge config
+    ch = match.challenge
+    if not ch:
+        raise HTTPException(status_code=400, detail="Cannot rematch — original challenge config missing")
+
+    # Create a new private challenge with same settings
+    new_ch_id = str(uuid.uuid4())
+    new_challenge = Challenge(
+        id=new_ch_id,
+        creator_id=current_user.id,
+        match_type=MatchTypeEnum.private,   # rematch is always private
+        scoring=ch.scoring,
+        distance=ch.distance,
+        arrow_count=ch.arrow_count,
+        invite_message=None,
+        deadline=None,
+        is_private=True,
+        is_active=True,
+    )
+    db.add(new_challenge)
+
+    # Record rematch proposal on the original match
+    match.rematch_status = "proposed"
+    match.rematch_proposed_by = current_user.id
+    db.commit()
+
+    # Get proposer's name for the WS notification
+    me_profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    proposer_name = me_profile.name if me_profile else "Opponent"
+
+    # Push notification to opponent
+    asyncio.ensure_future(manager.notify_user(opp.user_id, {
+        "type": "rematch_proposed",
+        "match_id": match_id,
+        "challenge_id": new_ch_id,
+        "proposed_by": proposer_name,
+        "scoring": ch.scoring.value,
+        "distance": ch.distance,
+        "arrow_count": ch.arrow_count,
+        "match_type": ch.match_type.value,
+    }))
+
+    return RematchOut(status="proposed", new_challenge_id=new_ch_id)
+
+@router.post("/matches/{match_id}/rematch/accept", response_model=RematchOut)
+async def accept_rematch(
+    match_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Accept a rematch proposal. Joins the new challenge, creating a new match.
+    Pushes 'rematch_accepted' WS event to the proposer with the new match_id.
+    """
+
+    match = _load_match(match_id, db)
+    if match.rematch_status != "proposed":
+        raise HTTPException(status_code=400, detail="No rematch proposal to accept")
+
+    proposer_id = match.rematch_proposed_by
+    if current_user.id == proposer_id:
+        raise HTTPException(status_code=400, detail="Cannot accept your own rematch proposal")
+
+    opp = _get_opponent(match, current_user.id)
+    if not opp or opp.user_id != proposer_id:
+        raise HTTPException(status_code=403, detail="Not your rematch")
+
+    # Find the new challenge created by propose_rematch
+    new_ch = (
+        db.query(Challenge)
+        .filter(
+            Challenge.creator_id == proposer_id,
+            Challenge.is_private == True,
+            Challenge.is_active == True,
+        )
+        .order_by(Challenge.created_at.desc())
+        .first()
+    )
+    if not new_ch:
+        raise HTTPException(status_code=404, detail="Rematch challenge not found")
+
+    # Create new match
+    new_match_id = str(uuid.uuid4())
+    new_match = Match(id=new_match_id, challenge_id=new_ch.id, status="active")
+    db.add(new_match)
+    db.add(MatchParticipant(match_id=new_match_id, user_id=proposer_id, is_creator=True))
+    db.add(MatchParticipant(match_id=new_match_id, user_id=current_user.id, is_creator=False))
+    new_ch.is_active = False
+
+    match.rematch_status = "accepted"
+    db.commit()
+
+    me_profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    acceptor_name = me_profile.name if me_profile else "Opponent"
+
+    ch = new_ch
+
+    # Notify proposer that rematch was accepted
+    asyncio.ensure_future(manager.notify_user(proposer_id, {
+        "type": "rematch_accepted",
+        "match_id": new_match_id,
+        "challenge_id": new_ch.id,
+        "opponent_name": acceptor_name,
+        "scoring": ch.scoring.value,
+        "distance": ch.distance,
+        "arrow_count": ch.arrow_count,
+        "match_type": ch.match_type.value,
+    }))
+
+    return RematchOut(
+        status="accepted",
+        new_match_id=new_match_id,
+        new_challenge_id=new_ch.id,
+    )
+
+@router.post("/matches/{match_id}/rematch/decline", response_model=RematchOut)
+async def decline_rematch(
+    match_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Decline a rematch proposal. Notifies the proposer via WS."""
+
+    match = _load_match(match_id, db)
+    if match.rematch_status != "proposed":
+        raise HTTPException(status_code=400, detail="No rematch proposal to decline")
+
+    proposer_id = match.rematch_proposed_by
+    match.rematch_status = "declined"
+    db.commit()
+
+    me_profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    decliner_name = me_profile.name if me_profile else "Opponent"
+
+    asyncio.ensure_future(manager.notify_user(proposer_id, {
+        "type": "rematch_declined",
+        "match_id": match_id,
+        "declined_by": decliner_name,
+    }))
+
+    return RematchOut(status="declined")

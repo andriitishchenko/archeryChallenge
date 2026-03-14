@@ -112,6 +112,10 @@ class Match(Base):
     status = Column(String, default="waiting")            # waiting, active, complete
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+    # Rematch state: None | "proposed" | "accepted" | "declined"
+    rematch_status = Column(String, nullable=True)
+    # user_id of who proposed the rematch
+    rematch_proposed_by = Column(String, nullable=True)
 
     challenge = relationship("Challenge", back_populates="matches")
     participants = relationship("MatchParticipant", back_populates="match", cascade="all, delete-orphan")
