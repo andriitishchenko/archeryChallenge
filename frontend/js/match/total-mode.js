@@ -1,12 +1,32 @@
 // =============================================
 // ARROWMATCH — Total-Score Mode
-// Enter all arrows → submit → poll for opponent result.
-// Depends on: core/state.js, core/api.js, core/utils.js,
+// Enter all arrows → submit → wait for opponent result.
+// Reacts to WS_OPP_SCORE_DONE from EventBus instead of polling directly
+// from the WebSocket handler.
+//
+// Depends on: core/state.js, core/api.js, core/event-bus.js,
 //             match/match-state.js, match/score-input.js, match/bot.js
 // =============================================
 
 let _pollInterval = null;
-let _pollMatchId  = null;   // locked at poll start, survives match switching
+let _pollMatchId  = null; // locked at poll start, survives match switching
+
+// When server pushes "opponent has submitted their score" → accelerate poll
+EventBus.on(EVENT_TYPES.WS_OPP_SCORE_DONE, ({ matchId }) => {
+  const ms = STATE.activeMatches[matchId];
+  if (!ms) return;
+
+  if (STATE.currentMatchId === matchId && ms._polling) {
+    // Speed-poll: opponent is done, get the result now
+    clearInterval(_pollInterval);
+    _pollInterval = null;
+    _pollForResult();
+  } else if (STATE.currentMatchId !== matchId) {
+    showToast(`${ms.oppName} submitted their score in another match!`, 'info');
+  }
+});
+
+// ── Total-score logic ─────────────────────────────────────────────────────────
 
 async function checkTotalComplete() {
   const ms = STATE.matchState;
@@ -47,11 +67,11 @@ function _pollForResult() {
         if (STATE.currentMatchId === mid) _startTotalTiebreak(ms._totalMyScore);
         return;
       }
+
       if (status.status === 'complete' && status.result) {
         clearInterval(_pollInterval); _pollInterval = null;
         if (STATE.currentMatchId === mid) _setStatus('');
-        const oppScore = status.opp_score ?? 0;
-        completeMatch(ms._totalMyScore, oppScore, mid);
+        completeMatch(ms._totalMyScore, status.opp_score ?? 0, mid);
       }
     } catch {}
   }, 2000);
@@ -63,7 +83,8 @@ function _startTotalTiebreak(myCurrentScore) {
   ms._tiebreakBase  = myCurrentScore;
   arrowValues       = [null];
   activeArrowIndex  = 0;
-  // Repurpose the set-score UI for the tiebreak single-arrow input
+
+  // Repurpose the set-score UI for single tiebreak arrow
   document.getElementById('total-score-ui').classList.add('hidden');
   document.getElementById('set-score-ui').classList.remove('hidden');
   buildSetArrowRow(1);

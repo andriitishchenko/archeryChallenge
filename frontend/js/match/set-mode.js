@@ -1,10 +1,78 @@
 // =============================================
 // ARROWMATCH — Set-System Mode
-// Each set: 3 arrows → server decides winner.
-// Sudden-death tiebreak at 6:6.
-// Depends on: core/state.js, core/api.js, core/utils.js,
-//             match/match-state.js, match/score-input.js, match/bot.js
+// Each set: 3 arrows → server decides winner → next set or tiebreak.
+// Reacts to WS_OPP_SET_DONE and WS_OPP_TIEBREAK_DONE via EventBus.
+// Never calls WebSocket methods directly.
+//
+// Depends on: core/state.js, core/api.js, core/event-bus.js,
+//             match/match-state.js, match/score-input.js, match/bot.js,
+//             match/ws-manager.js
 // =============================================
+
+// ── EventBus subscriptions ────────────────────────────────────────────────────
+
+// Opponent finished their set arrows — resolve if we already submitted
+EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId }) => {
+  const ms       = STATE.activeMatches[matchId];
+  const isActive = STATE.currentMatchId === matchId;
+  if (!ms) return;
+
+  if (ms._pendingSetNumber !== undefined) {
+    // We already submitted; server was waiting for opponent — resolve now
+    const pendingSet = ms._pendingSetNumber;
+    delete ms._pendingSetNumber;
+
+    const prevId = STATE.currentMatchId;
+    STATE.currentMatchId = matchId;
+
+    api('POST', `/api/matches/${matchId}/set`, {
+      set_number: pendingSet,
+      arrows:     ms.setArrowValues || [],
+    }).then(result => {
+      if (result) _applySetResult(result, matchId);
+      STATE.currentMatchId = prevId;
+    });
+  } else if (isActive) {
+    showToast(`${ms.oppName} submitted their set`, 'info');
+  }
+});
+
+// Opponent finished their tiebreak arrow
+EventBus.on(EVENT_TYPES.WS_OPP_TIEBREAK_DONE, ({ matchId }) => {
+  const ms       = STATE.activeMatches[matchId];
+  const isActive = STATE.currentMatchId === matchId;
+  if (!ms || !ms._pendingTiebreak) return;
+
+  delete ms._pendingTiebreak;
+
+  const prevId  = STATE.currentMatchId;
+  STATE.currentMatchId = matchId;
+  const myArrow = isActive ? arrowValues[0] : null;
+
+  if (myArrow !== null) {
+    api('POST', `/api/matches/${matchId}/set`, {
+      set_number: 0,
+      arrows:     [myArrow],
+    }).then(result => {
+      STATE.currentMatchId = prevId;
+      if (!result) return;
+      if (isActive) {
+        if (result.tiebreak_required) {
+          showToast('Still tied! Shoot one more.', 'info');
+          arrowValues = [null]; activeArrowIndex = 0;
+          refreshSetArrowCells(); _setNumpadDisabled(false); _setStatus('');
+        } else if (result.match_complete) {
+          _setStatus('');
+          completeMatch(result.my_set_points, result.opp_set_points, matchId);
+        }
+      }
+    });
+  } else {
+    STATE.currentMatchId = prevId;
+  }
+});
+
+// ── Set resolution ────────────────────────────────────────────────────────────
 
 async function resolveSet() {
   const ms = STATE.matchState;
@@ -18,9 +86,8 @@ async function resolveSet() {
   _setNumpadDisabled(true);
   _setStatus(`Set ${setNumber}: waiting for opponent…`);
 
-  if (matchSocket?.readyState === WebSocket.OPEN) {
-    matchSocket.send(JSON.stringify({ type: 'set_submitted', set_number: setNumber }));
-  }
+  // Notify opponent we submitted
+  sendMatchMessage({ type: 'set_submitted', set_number: setNumber });
 
   if (ms.isBot) {
     const botArrows = _genBotArrows(ms.oppSkill || 'Skilled');
@@ -142,9 +209,7 @@ async function resolveTiebreak() {
   _setNumpadDisabled(true);
   _setStatus('Tiebreak: waiting for opponent…');
 
-  if (matchSocket?.readyState === WebSocket.OPEN) {
-    matchSocket.send(JSON.stringify({ type: 'tiebreak_submitted', set_number: 0 }));
-  }
+  sendMatchMessage({ type: 'tiebreak_submitted', set_number: 0 });
 
   if (ms.isBot) {
     const botArrow = Math.floor(Math.random() * 11);

@@ -80,11 +80,11 @@ function _storeTokens(access, refresh) {
 }
 
 function _clearSession() {
-  STATE.userId      = null;
-  STATE.accessToken = null;
+  STATE.userId       = null;
+  STATE.accessToken  = null;
   STATE.refreshToken = null;
-  STATE.user    = null;
-  STATE.profile = null;
+  STATE.user         = null;
+  STATE.profile      = null;
   localStorage.removeItem('arrowmatch_access_token');
   localStorage.removeItem('arrowmatch_refresh_token');
   localStorage.removeItem('arrowmatch_userid');

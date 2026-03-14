@@ -9,6 +9,10 @@
 
 ## Dev server
 ```bash
+# From project root (recommended — handles venv automatically):
+./start.sh
+
+# Or manually:
 cd backend && source venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 # UI: http://localhost:8000/   API docs: http://localhost:8000/docs
@@ -27,41 +31,80 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ## File map
 
 ```
+start.sh                      # project-root start script (creates venv, installs deps, runs uvicorn)
 backend/
-  main.py                   # app entry, serves /static, /health
-  core/config.py            # Settings (env vars, BOT_WAIT_SECONDS, DEBUG)
-  core/deps.py              # get_db, get_current_user
-  core/security.py          # JWT, bcrypt (72-byte truncation)
-  models/models.py          # ORM models + enums
-  models/database.py        # engine, SessionLocal, create_tables(), _migrate()
-  routers/auth.py           # /api/guest  /api/auth/*
-  routers/profile.py        # /api/profile/*
-  routers/challenges.py     # /api/challenges/*
-  routers/scores.py         # /api/matches/*  /api/history  /api/ranking  /api/achievements
-  ws/manager.py             # ConnectionManager singleton (match/feed/wait/matchmaking sockets)
-  ws/routes.py              # WS endpoints
-  bots/generator.py         # bot profile + score generation (±10%)
-  static/index.html         # SPA shell (loads 14 JS modules in order)
-  static/css/styles.css
-  static/js/
-    app-init.js             # init, restoreSession, showScene, _bgPollTick, _restoreActiveMatchesFromServer
-    core/state.js           # STATE object, matchSockets map, WS_BASE, API_BASE
-    core/api.js             # api(), ApiError (handles 401 refresh)
-    core/utils.js           # showToast, escHtml, getTimeAgo, copyToClipboard
-    match/bot.js            # generateBotOpponent, generateMockChallenges
-    match/score-input.js    # renderMatchScene, numpad handlers, arrow cells
-    match/set-mode.js       # resolveSet, _applySetResult, resolveTiebreak
-    match/total-mode.js     # checkTotalComplete, _pollForResult
-    match/match-state.js    # startMatch, completeMatch, forfeitMatch→_forfeitAndExit,
-                            # switchToMatch, proposeRematch, acceptRematch, declineRematch
-    match/websocket.js      # _connectMatchSocket, _scheduleBotFallback,
-                            # _openCreatorWaitSocket, connectChallengeFeed, findOpponent
-    screens/auth.js         # handleGuest, handleLogin, handleRegister, handleLogout
-    screens/challenges.js   # refreshChallengeList, joinChallenge, createChallenge,
-                            # refreshMyChallenges, deleteChallenge, handleChallengeLink
-    screens/settings.js     # refreshSettings, saveSettings
-    screens/history.js      # saveToHistory, refreshHistory
+  main.py                     # app entry; serves /static → ../frontend/, /health
+  core/config.py              # Settings (env vars, BOT_WAIT_SECONDS, DEBUG)
+  core/deps.py                # get_db, get_current_user
+  core/security.py            # JWT, bcrypt (72-byte truncation)
+  models/models.py            # ORM models + enums
+  models/database.py          # engine, SessionLocal, create_tables(), _migrate()
+  routers/auth.py             # /api/guest  /api/auth/*
+  routers/profile.py          # /api/profile/*
+  routers/challenges.py       # /api/challenges/*
+  routers/scores.py           # /api/matches/*  /api/history  /api/ranking  /api/achievements
+  ws/manager.py               # ConnectionManager singleton
+  ws/routes.py                # WS endpoints
+  bots/generator.py           # bot profile + score generation (±10%)
+frontend/                     # ← moved from backend/static/; served as /static/*
+  index.html                  # SPA shell — 7-layer event-driven script load order
+  css/styles.css
+  js/
+    core/
+      event-bus.js            # EventBus singleton + EVENT_TYPES constants  ← NEW
+      state.js                # STATE object, shared globals
+      api.js                  # api(), ApiError (handles 401 refresh)
+      utils.js                # showToast, escHtml, getTimeAgo, copyToClipboard
+    match/
+      bot.js                  # generateBotOpponent, generateMockChallenges
+      ws-manager.js           # ALL WS connections → EventBus.emit()       ← NEW
+      match-state.js          # startMatch, completeMatch, forfeit, rematch;
+                              # subscribes to WS events via EventBus
+      score-input.js          # renderMatchScene, numpad handlers, arrow cells;
+                              # subscribes to APP_MATCH_STARTED, WS_OPP_ARROW
+      total-mode.js           # total-score flow; subscribes to WS_OPP_SCORE_DONE
+      set-mode.js             # set-system flow; subscribes to WS_OPP_SET_DONE,
+                              # WS_OPP_TIEBREAK_DONE
+    screens/
+      auth.js                 # handleGuest, handleLogin, handleRegister, handleLogout
+      settings.js             # refreshSettings, saveSettings
+      challenges.js           # refreshChallengeList, joinChallenge, createChallenge,
+                              # refreshMyChallenges, deleteChallenge, handleChallengeLink,
+                              # findOpponent; subscribes to WS_NEW_CHALLENGE,
+                              # WS_CHALLENGE_REMOVED, WS_MM_STATUS, WS_MM_MATCHED
+      history.js              # saveToHistory, refreshHistory
+    app-init.js               # DOMContentLoaded, restoreSession, showScene, navigation;
+                              # subscribes to APP_MATCH_STARTED, APP_SESSION_READY
 ```
+
+## Event-driven architecture
+
+```
+Server push (WebSocket)
+        │
+        ▼
+  ws-manager.js          ← translates every WS message into EventBus.emit()
+        │
+        ▼
+   EventBus              ← global publish/subscribe hub (event-bus.js)
+        │
+   ┌────┴──────────────────────────────────┐
+   ▼                                       ▼
+match-state.js                    challenges.js / score-input.js /
+(mutates STATE, emits             total-mode.js / set-mode.js /
+ APP_* events)                    app-init.js
+        │
+        ▼
+   EventBus (APP_* events)
+        │
+        ▼
+  UI components react independently
+```
+
+Server state is always the source of truth. Components subscribe to events
+they care about and decide locally how to react. No module calls into another
+module's functions for WS handling — all cross-module communication goes via
+EventBus.
 
 ---
 

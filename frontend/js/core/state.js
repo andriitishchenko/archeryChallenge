@@ -1,19 +1,20 @@
 // =============================================
 // ARROWMATCH — Global State & Config
-// Loaded first. All other modules read from STATE.
+// Loaded first. Components READ from STATE; only dedicated managers WRITE to it.
+// Mutations that affect other modules always go through EventBus.emit().
 // =============================================
 
-// ── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = '';   // same-origin
+// ── Config ────────────────────────────────────────────────────────────────────
+const API_BASE = '';  // same-origin
 const WS_BASE  = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
 
-// ── Application state ────────────────────────────────────────────────────────
+// ── Application state ─────────────────────────────────────────────────────────
 const STATE = {
   userId:       null,
   accessToken:  null,
   refreshToken: null,
-  user:         null,    // { email, isGuest }
-  profile:      null,    // { name, gender, age, bowType, skillLevel, country }
+  user:         null,   // { email, isGuest }
+  profile:      null,   // { name, gender, age, bowType, skillLevel, country }
   currentScene: 'entry',
   activeChallengeId: null,
   currentMatchType:  'live',
@@ -45,16 +46,16 @@ Object.defineProperty(STATE, 'matchState', {
   }
 });
 
-// ── Score-input globals (owned by match/score-input.js, declared here so all
-//    modules can read arrowValues without circular imports) ───────────────────
+// ── Score-input globals ───────────────────────────────────────────────────────
+// Owned by match/score-input.js; declared here so all modules share the same ref.
 let activeArrowIndex = 0;
 let arrowValues      = [];
 
-// ── WebSocket maps ────────────────────────────────────────────────────────────
-// matchSockets: { [matchId]: WebSocket }  — owned by match/websocket.js
+// ── WebSocket socket map ──────────────────────────────────────────────────────
+// matchSockets: { [matchId]: WebSocket }  — owned by ws-manager.js
 const matchSockets = {};
 
-// window.matchSocket — backwards-compatible alias
+// window.matchSocket — backwards-compatible single-match alias
 Object.defineProperty(window, 'matchSocket', {
   get() { return matchSockets[STATE.currentMatchId] ?? null; },
   set(v) {
@@ -66,4 +67,4 @@ Object.defineProperty(window, 'matchSocket', {
   }
 });
 
-let mmSocket = null;   // matchmaking WebSocket — owned by match/websocket.js
+let mmSocket = null;  // matchmaking WebSocket — owned by ws-manager.js

@@ -1,21 +1,78 @@
 // =============================================
 // ARROWMATCH — Score Input UI
 // Arrow cell rendering, numpad handlers, match scene layout.
-// Depends on: core/state.js, core/utils.js,
-//             match/match-state.js, match/total-mode.js, match/set-mode.js
+// Subscribes to APP_MATCH_STARTED and APP_MATCH_SWITCHED events.
+// Never imports from other modules directly — reacts via EventBus.
+//
+// Depends on: core/state.js, core/event-bus.js, core/utils.js,
+//             match/match-state.js, match/total-mode.js, match/set-mode.js,
+//             match/ws-manager.js
 // =============================================
+
+// ── EventBus subscriptions ────────────────────────────────────────────────────
+
+// Re-render the full match scene whenever a match is started or switched
+EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored }) => {
+  renderMatchScene();
+  _resetRematchUI();
+  if (restored) {
+    // Restore arrow values that were in-progress before page reload
+    arrowValues = [...(matchState.arrowValues || [])];
+    refreshArrowCells();
+  }
+});
+
+EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
+  arrowValues = [...(matchState.arrowValues || [])];
+  renderMatchScene();
+});
+
+// Live opponent arrow indicator (total mode)
+EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value }) => {
+  if (STATE.currentMatchId !== matchId) return;
+  const ms = STATE.matchState;
+  if (!ms || ms.scoring !== 'total') return;
+  _showOpponentArrowIndicator(ms.oppName, arrow_index, value);
+});
+
+// Match complete — update UI overlay
+EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, matchState }) => {
+  if (!wasDisplayed) return;
+
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+
+  let icon, title;
+  if (myScore > oppScore)      { icon = '🏆'; title = 'You Win!'; }
+  else if (oppScore > myScore) { icon = '😤'; title = 'Better luck next time'; }
+  else                          { icon = '🤝'; title = "It's a Draw!"; }
+
+  const resultLine = matchState.scoring === 'sets'
+    ? `Set points: ${myScore}–${oppScore}`
+    : `Score: ${myScore} vs ${oppScore}`;
+
+  document.getElementById('complete-icon').textContent   = icon;
+  document.getElementById('complete-title').textContent  = title;
+  document.getElementById('complete-result').textContent = resultLine;
+  document.getElementById('match-complete').classList.remove('hidden');
+  _setNumpadDisabled(false);
+  _setStatus('');
+
+  document.getElementById('forfeit-btn')?.classList.add('hidden');
+});
 
 // ── Scene render ──────────────────────────────────────────────────────────────
 
 function renderMatchScene() {
   const ms = STATE.matchState;
+  if (!ms) return;
+
   document.getElementById('ch-my-name').textContent  = ms.myName;
   document.getElementById('ch-opp-name').textContent = ms.oppName;
   document.getElementById('ch-dist').textContent     = ms.dist;
 
   // Ensure status bar element exists
   if (!document.getElementById('match-status')) {
-    const el = document.createElement('div');
+    const el     = document.createElement('div');
     el.id        = 'match-status';
     el.className = 'match-status-bar hidden';
     document.getElementById('score-board')?.prepend(el);
@@ -96,6 +153,7 @@ function activateSetCell(idx) { activeArrowIndex = idx; refreshSetArrowCells(); 
 
 function refreshArrowCells() {
   const ms = STATE.matchState;
+  if (!ms) return;
   for (let i = 0; i < ms.arrowCount; i++) {
     const cell = document.getElementById(`ac-${i}`);
     if (!cell) continue;
@@ -147,14 +205,11 @@ function updateTotalSum() {
   document.getElementById('total-sum').textContent = sum;
 }
 
-/** Update the set-system scoreboard (e.g. "2:0"). */
 function refreshSetScore() {
   const ms = STATE.matchState;
   if (!ms) return;
-  const myEl  = document.getElementById('set-my-score');
-  const oppEl = document.getElementById('set-opp-score');
-  if (myEl)  myEl.textContent  = ms.setMyScore  ?? 0;
-  if (oppEl) oppEl.textContent = ms.setOppScore ?? 0;
+  document.getElementById('set-my-score') .textContent = ms.setMyScore  ?? 0;
+  document.getElementById('set-opp-score').textContent = ms.setOppScore ?? 0;
 }
 
 // ── Numpad handlers ───────────────────────────────────────────────────────────
@@ -166,9 +221,6 @@ function numInput(val) {
     numInputTotal(val);
   }
   saveMatchState();
-  if (matchSocket?.readyState === WebSocket.OPEN) {
-    matchSocket.send(JSON.stringify({ type: 'score_update', arrow_index: activeArrowIndex, value: val }));
-  }
 }
 
 function numInputTotal(val) {
@@ -182,9 +234,8 @@ function numInputTotal(val) {
   refreshArrowCells();
   updateTotalSum();
 
-  if (matchSocket?.readyState === WebSocket.OPEN) {
-    matchSocket.send(JSON.stringify({ type: 'arrow', arrow_index: prevIdx, value: val }));
-  }
+  // Notify opponent of live arrow (event-driven send through WS manager)
+  sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
 
   checkTotalComplete();
 }
@@ -234,9 +285,9 @@ function numDelSet() {
       if (arrowValues[i] !== null) { target = i; break; }
     }
   }
-  arrowValues[target]           = null;
-  STATE.matchState.setArrowValues = [...arrowValues];
-  activeArrowIndex              = target;
+  arrowValues[target]              = null;
+  STATE.matchState.setArrowValues  = [...arrowValues];
+  activeArrowIndex                 = target;
   refreshSetArrowCells();
 }
 
@@ -251,9 +302,8 @@ async function _submitScoreToServer(arrows) {
   } catch (e) {
     console.warn('Score submit failed:', e.message);
   }
-  if (matchSocket?.readyState === WebSocket.OPEN) {
-    matchSocket.send(JSON.stringify({ type: 'score_submitted' }));
-  }
+  // Notify opponent score is done
+  sendMatchMessage({ type: 'score_submitted' });
 }
 
 // ── Status / numpad helpers ───────────────────────────────────────────────────
@@ -265,4 +315,30 @@ function _setStatus(msg) {
 
 function _setNumpadDisabled(disabled) {
   document.querySelectorAll('.num-btn').forEach(b => { b.disabled = disabled; });
+}
+
+// ── Opponent arrow live indicator ─────────────────────────────────────────────
+
+function _showOpponentArrowIndicator(oppName, arrowIndex, value) {
+  const indicator = document.getElementById('opp-live-indicator');
+  if (!indicator) return;
+  indicator.classList.remove('hidden');
+  indicator.classList.add('active');
+  indicator.textContent = `${oppName}: arrow ${arrowIndex + 1} → ${value}`;
+  clearTimeout(indicator._hideTimer);
+  indicator._hideTimer = setTimeout(() => {
+    indicator.classList.remove('active');
+    indicator.textContent = `${oppName} is shooting…`;
+  }, 2500);
+}
+
+function _showOppSetArrows(oppTotal, arrows) {
+  const ms        = STATE.matchState;
+  const indicator = document.getElementById('opp-live-indicator');
+  if (!indicator) return;
+  indicator.classList.remove('hidden');
+  const arrowStr = arrows.length ? arrows.join(' ') + ' = ' : '';
+  indicator.textContent = `${ms?.oppName || 'Opp'}: ${arrowStr}${oppTotal} pts`;
+  clearTimeout(indicator._hideTimer);
+  indicator._hideTimer = setTimeout(() => indicator.classList.add('hidden'), 3500);
 }

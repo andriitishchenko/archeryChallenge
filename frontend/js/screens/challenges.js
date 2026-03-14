@@ -1,9 +1,118 @@
 // =============================================
 // ARROWMATCH — Challenges Screen
-// List, new, my challenges, filters, invite links.
-// Depends on: core/state.js, core/api.js, core/utils.js,
-//             match/match-state.js, match/bot.js
+// List, new, my challenges, filters, invite links, matchmaking.
+// Subscribes to EventBus for real-time challenge feed updates
+// and matchmaking results. Never handles WebSocket directly.
+//
+// Depends on: core/state.js, core/api.js, core/utils.js, core/event-bus.js,
+//             match/match-state.js, match/bot.js, match/ws-manager.js
 // =============================================
+
+// ── Challenge feed EventBus subscriptions ────────────────────────────────────
+
+EventBus.on(EVENT_TYPES.WS_NEW_CHALLENGE, ({ challenge }) => {
+  // Ignore own challenges
+  if (challenge.creator_id === STATE.userId) return;
+  // Apply active filters before inserting
+  if (!_challengePassesFilters(challenge)) return;
+
+  STATE.challenges.unshift(challenge);
+  if (STATE.currentScene === 'list-challenge') renderChallengeList();
+});
+
+EventBus.on(EVENT_TYPES.WS_CHALLENGE_REMOVED, ({ challenge_id }) => {
+  const idx = STATE.challenges.findIndex(c => c.id === challenge_id);
+  if (idx !== -1) {
+    STATE.challenges.splice(idx, 1);
+    if (STATE.currentScene === 'list-challenge') renderChallengeList();
+  }
+});
+
+// ── Matchmaking EventBus subscriptions ───────────────────────────────────────
+
+EventBus.on(EVENT_TYPES.WS_MM_STATUS, ({ message }) => {
+  const statusEl = document.getElementById('find-status');
+  if (statusEl) statusEl.innerHTML = `<span class="spinner"></span> ${escHtml(message)}`;
+});
+
+EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent }) => {
+  const statusEl = document.getElementById('find-status');
+  const btn      = document.querySelector('.find-btn');
+  if (statusEl) statusEl.textContent = '';
+  if (btn) { btn.disabled = false; btn.textContent = 'Find Opponent'; }
+
+  startMatch({
+    id:         match_id,
+    matchId:    match_id,
+    name:       opponent?.name || 'Opponent',
+    distance:   STATE.profile?.preferredDist || '30m',
+    scoring:    'total',
+    arrowCount: STATE.arrowCount,
+  });
+});
+
+EventBus.on(EVENT_TYPES.WS_ERROR, ({ matchId }) => {
+  if (matchId === 'matchmaking') _fallbackFindOpponent();
+});
+
+EventBus.on(EVENT_TYPES.WS_DISCONNECTED, ({ matchId, code }) => {
+  if (matchId === 'matchmaking' && code !== 1000) _fallbackFindOpponent();
+});
+
+// ── Quick Find / Matchmaking ──────────────────────────────────────────────────
+
+function findOpponent() {
+  if (!STATE.profile) { showToast('Complete your profile first', 'error'); showScene('settings'); return; }
+
+  const statusEl = document.getElementById('find-status');
+  const btn      = document.querySelector('.find-btn');
+  btn.disabled     = true;
+  btn.textContent  = 'Searching…';
+
+  connectMatchmaking({
+    user_id:     STATE.userId,
+    name:        STATE.profile.name,
+    gender:      STATE.profile.gender,
+    age:         STATE.profile.age,
+    bow_type:    STATE.profile.bowType,
+    skill_level: STATE.profile.skillLevel,
+    country:     STATE.profile.country,
+  });
+
+  // Fallback safety — if WS never fires MM events within 15 s
+  const _safetyTimer = setTimeout(() => {
+    if (document.querySelector('.find-btn')?.disabled) _fallbackFindOpponent();
+  }, 15000);
+}
+
+function _fallbackFindOpponent() {
+  disconnectMatchmaking();
+
+  const statusEl = document.getElementById('find-status');
+  const btn      = document.querySelector('.find-btn');
+
+  const messages = [
+    'Connecting to matchmaking…',
+    'Scanning for opponents…',
+    'Applying filters…',
+    'Almost there…',
+    'Generating bot challenger…',
+  ];
+  let idx = 0;
+  if (statusEl) statusEl.innerHTML = `<span class="spinner"></span> ${messages[0]}`;
+
+  const t = setInterval(() => {
+    idx++;
+    if (idx >= messages.length) {
+      clearInterval(t);
+      if (btn) { btn.disabled = false; btn.textContent = 'Find Opponent'; }
+      if (statusEl) statusEl.textContent = '';
+      startMatch(generateBotOpponent());
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span class="spinner"></span> ${messages[idx]}`;
+    }
+  }, 900);
+}
 
 // ── Challenge List ────────────────────────────────────────────────────────────
 
@@ -32,7 +141,7 @@ async function refreshChallengeList() {
 
 function renderChallengeList() {
   const container = document.getElementById('challenge-list');
-  const list = STATE.challenges;
+  const list      = STATE.challenges;
 
   if (list.length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><p class="empty-text">No open challenges match your filters</p></div>`;
@@ -40,14 +149,14 @@ function renderChallengeList() {
   }
 
   container.innerHTML = list.map(c => {
-    const name  = c.creator_name || c.name || 'Archer';
-    const gender = c.creator_gender || c.gender || '—';
-    const age   = c.creator_age || c.age || '—';
-    const bow   = c.creator_bow_type || c.bowType || '—';
-    const skill = c.creator_skill_level || c.skillLevel || '—';
-    const dist  = c.distance || '—';
-    const msg   = c.invite_message || c.msg || '';
-    const date  = new Date(c.created_at || c.createdAt);
+    const name   = c.creator_name  || c.name     || 'Archer';
+    const gender = c.creator_gender || c.gender   || '—';
+    const age    = c.creator_age   || c.age       || '—';
+    const bow    = c.creator_bow_type   || c.bowType   || '—';
+    const skill  = c.creator_skill_level || c.skillLevel || '—';
+    const dist   = c.distance || '—';
+    const msg    = c.invite_message || c.msg || '';
+    const date   = new Date(c.created_at || c.createdAt);
     return `
     <div class="challenge-card" onclick="joinChallenge('${c.id}')">
       <div class="ch-card-top">
@@ -75,8 +184,6 @@ async function joinChallenge(id) {
   try {
     const data = await api('POST', `/api/challenges/${id}/join`);
     if (data?.match_id) {
-      // Use challenge fields returned directly by the server — do NOT rely on
-      // STATE.challenges which may have been removed by the feed WS already.
       startMatch({
         id:         data.challenge_id,
         matchId:    data.match_id,
@@ -92,7 +199,7 @@ async function joinChallenge(id) {
     if (e.status !== 404) { showToast(e.message || 'Could not join', 'error'); return; }
   }
 
-  // Offline fallback — challenge data from local state or mock
+  // Offline fallback
   const ch = STATE.challenges.find(c => c.id === id) || generateMockOpponent(id);
   startMatch({
     id:         ch.id,
@@ -188,14 +295,8 @@ async function createChallenge() {
     showToast('Private link copied to clipboard!', 'success');
     showScene('my-challenges');
   } else if (type === 'live') {
-    // Open the waiting socket BEFORE calling startMatch so notify_user() can
-    // reach the creator when an opponent joins. The socket is registered in
-    // manager._user_sockets[creator_id] via register_creator_waiting().
-    _openCreatorWaitSocket(challengeId, {
-      distance: distChip.textContent.trim(),
-      scoring,
-      arrowCount: STATE.arrowCount,
-    });
+    // Open wait socket so server can push opponent_joined → EventBus → match-state.js reacts
+    openCreatorWaitSocket(challengeId);
     startMatch({
       id: challengeId, name: 'Waiting for opponent…',
       distance: distChip.textContent.trim(), scoring, arrowCount: STATE.arrowCount,
@@ -216,7 +317,6 @@ async function refreshMyChallenges() {
   const container = document.getElementById('my-challenges-list');
   container.innerHTML = `<div class="empty-state"><span class="spinner"></span></div>`;
 
-  // Fetch both my challenges (creator) and active matches (both participants) in parallel
   const [challengesRes, activeMatchesRes] = await Promise.allSettled([
     api('GET', '/api/challenges/mine'),
     api('GET', '/api/matches/mine/active'),
@@ -227,35 +327,32 @@ async function refreshMyChallenges() {
     localStorage.setItem('arrowmatch_my_challenges', JSON.stringify(STATE.myChallenges));
   }
 
-  // Build a lookup of active server matches by challenge_id for fast join
   const serverActiveMatches = (activeMatchesRes.status === 'fulfilled' && activeMatchesRes.value)
     ? activeMatchesRes.value : [];
-  const activeByChallenge = {};   // challenge_id -> ActiveMatchOut
-  const activeOrphans     = [];   // matches without a challenge (e.g. matchmaking)
+  const activeByChallenge = {};
   for (const sm of serverActiveMatches) {
     if (sm.challenge_id) activeByChallenge[sm.challenge_id] = sm;
-    else                 activeOrphans.push(sm);
   }
 
-  // Merge server active matches into STATE.activeMatches so resume works
+  // Merge server matches into STATE so resume tab stays correct
   for (const sm of serverActiveMatches) {
     if (!STATE.activeMatches[sm.match_id]) {
       STATE.activeMatches[sm.match_id] = {
-        id:            sm.match_id,
-        challengeId:   sm.challenge_id,
-        myName:        STATE.profile?.name || 'You',
-        oppName:       sm.opponent_name,
-        scoring:       sm.scoring,
-        arrowCount:    sm.arrow_count || 18,
-        dist:          sm.distance,
-        isBot:         false,
-        isCreator:     sm.is_creator,
-        complete:      false,
-        arrowValues:   [],
+        id:             sm.match_id,
+        challengeId:    sm.challenge_id,
+        myName:         STATE.profile?.name || 'You',
+        oppName:        sm.opponent_name,
+        scoring:        sm.scoring,
+        arrowCount:     sm.arrow_count || 18,
+        dist:           sm.distance,
+        isBot:          false,
+        isCreator:      sm.is_creator,
+        complete:       false,
+        arrowValues:    [],
         setArrowValues: [],
-        setMyScore:    0,
-        setOppScore:   0,
-        currentSet:    1,
+        setMyScore:     0,
+        setOppScore:    0,
+        currentSet:     1,
       };
     }
   }
@@ -266,7 +363,6 @@ async function refreshMyChallenges() {
     return;
   }
 
-  // Build cards for my created challenges
   const challengeCards = STATE.myChallenges.map(ch => {
     const type    = ch.match_type || ch.type || '—';
     const scoring = ch.scoring || 'total';
@@ -274,7 +370,6 @@ async function refreshMyChallenges() {
     const arrows  = ch.arrow_count || ch.arrowCount;
     const isPriv  = ch.is_private === true || ch.isPrivate === true || ch.match_type === 'private';
 
-    // Find active match: prefer server data, fall back to client STATE
     const serverMatch = activeByChallenge[ch.id];
     const stateMatch  = Object.values(STATE.activeMatches).find(
       ms => !ms.complete && (ms.challengeId === ch.id || ms.id === ch.id)
@@ -282,7 +377,6 @@ async function refreshMyChallenges() {
     const activeMs = serverMatch
       ? STATE.activeMatches[serverMatch.match_id] || stateMatch
       : stateMatch;
-
     const matchId  = activeMs?.id || serverMatch?.match_id;
     const oppName  = activeMs?.oppName || serverMatch?.opponent_name || '';
 
@@ -310,7 +404,6 @@ async function refreshMyChallenges() {
     </div>`;
   });
 
-  // Build cards for active matches where I am the JOINER (no challenge card)
   const joinerCards = serverActiveMatches
     .filter(sm => !sm.is_creator && !STATE.myChallenges.find(ch => ch.id === sm.challenge_id))
     .map(sm => {
@@ -326,9 +419,7 @@ async function refreshMyChallenges() {
         <span class="active-match-label">Live vs ${escHtml(oppName)}</span>
         <button class="active-match-resume" onclick="switchToMatch('${escHtml(matchId)}');event.stopPropagation()">Resume →</button>
       </div>
-      <div class="my-ch-actions">
-        <span class="ch-tag">Joined</span>
-      </div>
+      <div class="my-ch-actions"><span class="ch-tag">Joined</span></div>
     </div>`;
     });
 
@@ -355,7 +446,7 @@ function copyPrivateLink(id) {
   showToast('Link copied!', 'success');
 }
 
-// ── Challenge invite link (URL param ?c=...) ──────────────────────────────────
+// ── Invite link handler ───────────────────────────────────────────────────────
 
 async function handleChallengeLink(code) {
   showToast('Opening challenge…', 'info');
@@ -363,19 +454,15 @@ async function handleChallengeLink(code) {
   try {
     const ch = await api('GET', `/api/challenges/${code}`);
     if (ch) {
-      // Block joining own challenge: server rejects with 400 but we check
-      // client-side first for a clear immediate error message.
       if (ch.creator_id === STATE.userId) {
         showToast('This is your own challenge — you cannot join it as an opponent', 'error');
         showScene('my-challenges');
         return;
       }
-
       if (ch.is_active !== false) {
         try {
           const joined = await api('POST', `/api/challenges/${ch.id}/join`);
           if (joined?.match_id) {
-            // Use fields from the enriched JoinResponse — authoritative source
             startMatch({
               id:         joined.challenge_id,
               matchId:    joined.match_id,
@@ -388,7 +475,6 @@ async function handleChallengeLink(code) {
             return;
           }
         } catch (joinErr) {
-          // Surface server-side rejections clearly instead of silently going offline
           if (joinErr?.status === 400) {
             showToast(joinErr.message || 'Cannot join this challenge', 'error');
             showScene('list-challenge');
@@ -433,182 +519,6 @@ function updateFilterBadge() {
   document.getElementById('filter-badge').textContent = allSelected ? 'All' : 'Active';
 }
 
-// ── Creator waiting socket ────────────────────────────────────────────────────
-
-// Tracks the open waiting socket so it can be closed when no longer needed
-let _creatorWaitSocket = null;
-
-/**
- * Open WS /ws/challenge/{challengeId}/wait so the server can push
- * opponent_joined to the creator with the real match_id.
- * Called immediately after creating a live challenge.
- *
- * @param {string} challengeId  The challenge ID returned from POST /api/challenges
- * @param {object} matchParams  { distance, scoring, arrowCount } for startMatch on join
- */
-function _openCreatorWaitSocket(challengeId, matchParams) {
-  if (_creatorWaitSocket) {
-    _creatorWaitSocket.close();
-    _creatorWaitSocket = null;
-  }
-
-  try {
-    _creatorWaitSocket = new WebSocket(
-      `${WS_BASE}/ws/challenge/${challengeId}/wait?token=${STATE.accessToken || ''}`
-    );
-
-    _creatorWaitSocket.onopen = () => {
-      // Keep alive
-      _creatorWaitSocket._ping = setInterval(() => {
-        if (_creatorWaitSocket?.readyState === WebSocket.OPEN)
-          _creatorWaitSocket.send(JSON.stringify({ type: 'ping' }));
-      }, 20000);
-    };
-
-    _creatorWaitSocket.onmessage = (e) => {
-      let msg;
-      try { msg = JSON.parse(e.data); } catch { return; }
-
-      if (msg.type === 'opponent_joined') {
-        // Close the waiting socket — we're transitioning to a live match socket
-        closeCreatorWaitSocket();
-
-        const ms = STATE.activeMatches[challengeId];
-        if (ms) {
-          // Migrate the pending match state to the real server match_id
-          const realMatchId  = msg.match_id;
-          const opponentName = msg.opponent_name || 'Opponent';
-
-          ms.id      = realMatchId;
-          ms.oppName = opponentName;
-          ms._opponentJoined = true;
-
-          // Cancel bot fallback before re-keying so the timer closure
-          // (keyed on challengeId) can be cleared explicitly
-          if (typeof _botFallbackTimers !== 'undefined' && _botFallbackTimers[challengeId]) {
-            clearTimeout(_botFallbackTimers[challengeId]);
-            delete _botFallbackTimers[challengeId];
-          }
-
-          STATE.activeMatches[realMatchId] = ms;
-          delete STATE.activeMatches[challengeId];
-          if (STATE.currentMatchId === challengeId) STATE.currentMatchId = realMatchId;
-
-          saveMatchState();
-
-          // Re-render the full match scene so ALL name elements update,
-          // including #set-opp-name used in set-scoring mode.
-          if (STATE.currentMatchId === realMatchId) renderMatchScene();
-
-          // Open the real per-match WebSocket now that we have a match_id
-          _connectMatchSocket(realMatchId);
-          _startBgStatusPoll();
-
-          showToast(`${opponentName} joined your challenge!`, 'success');
-        }
-      }
-    };
-
-    _creatorWaitSocket.onerror = () => {
-      // Non-fatal — bot fallback timer still runs
-    };
-
-    _creatorWaitSocket.onclose = () => {
-      if (_creatorWaitSocket?._ping) clearInterval(_creatorWaitSocket._ping);
-    };
-
-  } catch (err) {
-    console.warn('Could not open creator wait socket:', err);
-  }
-}
-
-function closeCreatorWaitSocket() {
-  if (_creatorWaitSocket) {
-    if (_creatorWaitSocket._ping) clearInterval(_creatorWaitSocket._ping);
-    _creatorWaitSocket.close();
-    _creatorWaitSocket = null;
-  }
-}
-
-// ── Challenge feed WebSocket (real-time list updates) ─────────────────────────
-
-let _challengeFeedSocket = null;
-
-/**
- * Connect to WS /ws/challenges to receive real-time challenge list updates.
- * Called on login/session restore. Reconnects automatically on unexpected close.
- */
-function connectChallengeFeed() {
-  if (_challengeFeedSocket &&
-      (_challengeFeedSocket.readyState === WebSocket.OPEN ||
-       _challengeFeedSocket.readyState === WebSocket.CONNECTING)) return;
-
-  try {
-    _challengeFeedSocket = new WebSocket(
-      `${WS_BASE}/ws/challenges?token=${STATE.accessToken || ''}`
-    );
-
-    _challengeFeedSocket.onopen = () => {
-      _challengeFeedSocket._ping = setInterval(() => {
-        if (_challengeFeedSocket?.readyState === WebSocket.OPEN)
-          _challengeFeedSocket.send(JSON.stringify({ type: 'ping' }));
-      }, 25000);
-    };
-
-    _challengeFeedSocket.onmessage = (e) => {
-      let msg;
-      try { msg = JSON.parse(e.data); } catch { return; }
-
-      if (msg.type === 'new_challenge') {
-        const ch = msg.challenge;
-        // Ignore own challenges — server already excludes them in the REST list
-        // but WS broadcasts to everyone; the creator_id check guards correctly.
-        if (ch.creator_id === STATE.userId) return;
-
-        // Apply active filters before inserting
-        if (!_challengePassesFilters(ch)) return;
-
-        // Prepend to state and re-render only if list screen is active
-        STATE.challenges.unshift(ch);
-        if (STATE.currentScene === 'list-challenge') renderChallengeList();
-
-      } else if (msg.type === 'challenge_removed') {
-        const idx = STATE.challenges.findIndex(c => c.id === msg.challenge_id);
-        if (idx !== -1) {
-          STATE.challenges.splice(idx, 1);
-          if (STATE.currentScene === 'list-challenge') renderChallengeList();
-        }
-      }
-    };
-
-    _challengeFeedSocket.onerror = () => {};
-
-    _challengeFeedSocket.onclose = (e) => {
-      if (_challengeFeedSocket?._ping) clearInterval(_challengeFeedSocket._ping);
-      _challengeFeedSocket = null;
-      // Reconnect after 5 s unless intentionally closed (code 1000)
-      if (e.code !== 1000 && STATE.accessToken) {
-        setTimeout(connectChallengeFeed, 5000);
-      }
-    };
-
-  } catch (err) {
-    console.warn('Challenge feed WS unavailable:', err);
-  }
-}
-
-function disconnectChallengeFeed() {
-  if (_challengeFeedSocket) {
-    _challengeFeedSocket.close(1000);
-    _challengeFeedSocket = null;
-  }
-}
-
-/**
- * Check whether a challenge from the feed passes the user's current filters.
- * Mirrors the server-side filter logic so we don't show cards the REST list
- * would have hidden.
- */
 function _challengePassesFilters(ch) {
   const f = STATE.filters;
   if (f.skill.length  && !f.skill.includes(ch.creator_skill_level))  return false;

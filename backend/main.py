@@ -1,12 +1,17 @@
 """
 ArrowMatch API — FastAPI application entry point.
 
+Directory layout (frontend moved out of backend):
+  project-root/
+    backend/     ← this file lives here
+    frontend/    ← SPA assets (index.html, css/, js/)
+
 Run with:
+    cd backend
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-The server also serves the frontend:
-  GET /          → static/index.html
-  GET /static/*  → static assets
+UI:       http://localhost:8000/
+API docs: http://localhost:8000/docs   (DEBUG mode only)
 """
 import os
 from fastapi import FastAPI
@@ -19,7 +24,10 @@ from models.database import create_tables
 from routers import auth, profile, challenges, scores
 from ws.routes import router as ws_router
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+# Frontend lives one level above the backend package
+_BACKEND_DIR  = os.path.dirname(__file__)
+_PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
+FRONTEND_DIR  = os.path.join(_PROJECT_ROOT, "frontend")
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
@@ -54,26 +62,26 @@ app.include_router(ws_router)
 @app.on_event("startup")
 def on_startup():
     create_tables()
-    # Create static dir if missing (first run)
-    os.makedirs(STATIC_DIR, exist_ok=True)
+    os.makedirs(FRONTEND_DIR, exist_ok=True)
 
 
 # ── Frontend serving ──────────────────────────────────────────────────────────
 
-# Serve /static/* assets (CSS, JS, images placed in ./static/)
-if os.path.isdir(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Serve /static/* → frontend/ (CSS, JS, images).
+# HTML still references /static/css/ and /static/js/ so asset paths stay intact.
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 @app.get("/index.html", include_in_schema=False)
 def serve_index():
     """Serve the frontend SPA on GET /."""
-    index_path = os.path.join(STATIC_DIR, "index.html")
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
     if not os.path.isfile(index_path):
         return JSONResponse(
             status_code=404,
-            content={"detail": "Frontend not found. Place index.html in ./static/"},
+            content={"detail": "Frontend not found. Place index.html in ../frontend/"},
         )
     return FileResponse(index_path, media_type="text/html")
 
