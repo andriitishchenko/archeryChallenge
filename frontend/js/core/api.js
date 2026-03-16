@@ -17,18 +17,24 @@ class ApiError extends Error {
  * Returns null on network error (callers fall back to local state).
  */
 async function api(method, path, body = null, { skipAuth = false } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+  const hasBody = body !== null && body !== undefined;
+  const headers = {};
   if (!skipAuth && STATE.accessToken) {
     headers['Authorization'] = `Bearer ${STATE.accessToken}`;
   }
+  if (hasBody) headers['Content-Type'] = 'application/json';
+
+  // Build fetch options — never send a body on GET/HEAD/DELETE
+  const bodyless = ['GET', 'HEAD', 'DELETE'].includes(method.toUpperCase());
+  const fetchOpts = (overrideHeaders) => ({
+    method,
+    headers: overrideHeaders || headers,
+    body: (!bodyless && hasBody) ? JSON.stringify(body) : undefined,
+  });
 
   let resp;
   try {
-    resp = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : null,
-    });
+    resp = await fetch(`${API_BASE}${path}`, fetchOpts());
   } catch (err) {
     console.warn('API offline:', path, err.message);
     return null;
@@ -38,10 +44,8 @@ async function api(method, path, body = null, { skipAuth = false } = {}) {
   if (resp.status === 401 && STATE.refreshToken && !skipAuth) {
     const refreshed = await _tryRefresh();
     if (refreshed) {
-      headers['Authorization'] = `Bearer ${STATE.accessToken}`;
-      resp = await fetch(`${API_BASE}${path}`, {
-        method, headers, body: body ? JSON.stringify(body) : null,
-      });
+      const retryHeaders = { ...headers, 'Authorization': `Bearer ${STATE.accessToken}` };
+      resp = await fetch(`${API_BASE}${path}`, fetchOpts(retryHeaders));
     } else {
       _clearSession();
       showScene('entry');
@@ -80,6 +84,7 @@ function _storeTokens(access, refresh) {
 }
 
 function _clearSession() {
+  WS.disconnect();
   STATE.userId       = null;
   STATE.accessToken  = null;
   STATE.refreshToken = null;

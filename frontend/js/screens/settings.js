@@ -82,7 +82,4 @@ async function saveSettings() {
   showScene('list-challenge');
 }
 
-function selectChip(btn, group) {
-  document.querySelectorAll(`#${group} .chip`).forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-}
+// selectChip is defined in screens/challenges.js (loaded after this file)

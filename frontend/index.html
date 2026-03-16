@@ -275,21 +275,21 @@
               <span class="mt-label">Live</span>
               <span class="mt-desc">Real-time</span>
             </button>
-            <button class="match-type-btn" data-type="async" onclick="selectMatchType(this)">
-              <span class="mt-icon">⏳</span>
-              <span class="mt-label">Async</span>
-              <span class="mt-desc">Your own pace</span>
-            </button>
             <button class="match-type-btn" data-type="scheduled" onclick="selectMatchType(this)">
               <span class="mt-icon">📅</span>
               <span class="mt-label">Scheduled</span>
               <span class="mt-desc">Set deadline</span>
             </button>
-            <button class="match-type-btn" data-type="private" onclick="selectMatchType(this)">
-              <span class="mt-icon">🔒</span>
-              <span class="mt-label">Private</span>
-              <span class="mt-desc">Link only</span>
-            </button>
+          </div>
+          <div class="toggle-row toggle-row--spread mt-sm">
+            <div>
+              <div class="toggle-label">🔒 Private</div>
+              <div class="text-xs muted">Opponent joins by link only</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="is-private-toggle">
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
 
@@ -330,7 +330,7 @@
           </div>
         </div>
 
-        <div class="card" id="deadline-card">
+        <div class="card hidden" id="deadline-card">
           <h3 class="card-title">Deadline</h3>
           <input type="datetime-local" id="challenge-deadline" class="full" />
           <p class="text-xs muted mt-xs">Results must be submitted by 23:59:59 of selected date</p>
@@ -392,7 +392,6 @@
             <div id="arrow-rows" class="arrow-rows">
               <!-- rows injected by JS -->
             </div>
-            <div id="opp-live-indicator" class="opp-live-indicator hidden"></div>
           </div>
           <!-- Set System mode -->
           <div id="set-score-ui" class="hidden">
@@ -413,6 +412,11 @@
             </div>
           </div>
         </div>
+
+        <!-- Status bar: instructions / waiting messages -->
+        <div id="match-status" class="match-status-bar hidden"></div>
+        <!-- Opponent results: last submitted set or arrow series -->
+        <div id="opponent-results" class="opponent-results hidden"></div>
 
         <!-- Numpad -->
         <div class="numpad" id="numpad">
@@ -506,28 +510,26 @@
       state.js       : STATE object, WS_BASE, API_BASE, shared globals
       api.js         : api() fetch helper, token management
       utils.js       : pure helpers (showToast, escHtml, …)
+      ws.js          : single /ws/user socket; routes all server→client events to EventBus
 
     Layer 2 — Bot / mock data (reads STATE only)
-      match/bot.js
+      match/bot.js   : generateBotOpponent, genBotArrows, genBotTotal
 
-    Layer 3 — WebSocket manager (reads STATE, emits to EventBus)
-      match/ws-manager.js : all WS connections → EventBus.emit()
-
-    Layer 4 — Match state manager (subscribes to WS events, mutates STATE, emits APP events)
+    Layer 3 — Match state (subscribes to WS events, mutates STATE, emits APP events)
       match/match-state.js
 
-    Layer 5 — Scoring UI (subscribes to APP events, renders DOM)
-      match/score-input.js  : arrow cells, numpad, scene render
+    Layer 4 — Scoring UI (subscribes to APP events, owns all match-scene DOM)
+      match/score-input.js  : arrow cells, numpad, forfeit confirm, rematch overlay
       match/total-mode.js   : total-score flow
       match/set-mode.js     : set-system flow
 
-    Layer 6 — Screen modules (subscribe to WS + APP events, call REST API)
+    Layer 5 — Screen modules (subscribe to WS + APP events, call REST API)
       screens/auth.js
       screens/settings.js
-      screens/challenges.js : also subscribes to WS_NEW_CHALLENGE, WS_CHALLENGE_REMOVED
+      screens/challenges.js : challenge list, my challenges, matchmaking
       screens/history.js
 
-    Layer 7 — Bootstrap (last — wires DOMContentLoaded, session restore, navigation)
+    Layer 6 — Bootstrap (wires DOMContentLoaded, session restore, navigation)
       app-init.js
   -->
 
@@ -536,28 +538,26 @@
   <script src="/static/js/core/state.js"></script>
   <script src="/static/js/core/api.js"></script>
   <script src="/static/js/core/utils.js"></script>
+  <script src="/static/js/core/ws.js"></script>
 
   <!-- Layer 2: Bot / mock data -->
   <script src="/static/js/match/bot.js"></script>
 
-  <!-- Layer 3: WebSocket manager -->
-  <script src="/static/js/match/ws-manager.js"></script>
-
-  <!-- Layer 4: Match state manager -->
+  <!-- Layer 3: Match state manager -->
   <script src="/static/js/match/match-state.js"></script>
 
-  <!-- Layer 5: Scoring UI -->
+  <!-- Layer 4: Scoring UI -->
   <script src="/static/js/match/score-input.js"></script>
   <script src="/static/js/match/total-mode.js"></script>
   <script src="/static/js/match/set-mode.js"></script>
 
-  <!-- Layer 6: Screen modules -->
+  <!-- Layer 5: Screen modules -->
   <script src="/static/js/screens/auth.js"></script>
   <script src="/static/js/screens/settings.js"></script>
   <script src="/static/js/screens/challenges.js"></script>
   <script src="/static/js/screens/history.js"></script>
 
-  <!-- Layer 7: Bootstrap -->
+  <!-- Layer 6: Bootstrap -->
   <script src="/static/js/app-init.js"></script>
 </body>
 </html>

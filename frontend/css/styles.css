@@ -88,7 +88,6 @@ button { cursor: pointer; border: none; background: none; }
 #topnav.hidden ~ .scene,
 .scene:first-child { top: 0; }
 #bottomnav.hidden ~ .scene,
-#scene-entry.active { bottom: 0; }
 
 /* Scene scroll container */
 .scene-scroll {
@@ -113,20 +112,15 @@ button { cursor: pointer; border: none; background: none; }
   background: var(--bg);
   overflow: hidden;
 }
-#scene-entry.active { display: flex; }
+#scene-entry.active { display: flex; bottom: 0; }
 
 .entry-bg {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
-.entry-target {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  animation: target-pulse 4s ease-in-out infinite;
-}
-.entry-target { width: 320px; height: 320px; top: -60px; left: 50%; transform: translateX(-50%); opacity: 0.4; }
+
+.entry-target { position: absolute; border-radius: 50%; border: 1px solid var(--border); animation: target-pulse 4s ease-in-out infinite; width: 320px; height: 320px; top: -60px; left: 50%; transform: translateX(-50%); opacity: 0.4; }
 .entry-target.t2 { width: 220px; height: 220px; top: -20px; left: 50%; transform: translateX(-50%); opacity: 0.25; animation-delay: 0.5s; }
 .entry-target.t3 { width: 120px; height: 120px; top: 20px; left: 50%; transform: translateX(-50%); opacity: 0.15; animation-delay: 1s; }
 
@@ -229,6 +223,7 @@ textarea { resize: none; }
 
 /* Toggle row */
 .toggle-row { display: flex; background: var(--bg-raised); border-radius: 10px; padding: 3px; gap: 3px; }
+.toggle-row--spread { justify-content: space-between; align-items: center; }
 .toggle-btn {
   flex: 1; padding: 9px; border-radius: 8px;
   font-size: 13px; font-weight: 600;
@@ -389,7 +384,7 @@ textarea { resize: none; }
 
 .rules-box { background: var(--bg-raised); border-radius: var(--r-sm); padding: 12px 14px; font-size: 13px; color: var(--text-muted); line-height: 1.8; }
 
-.scoring-opts { }
+.scoring-opts { /* layout placeholder — intentionally empty */ }
 
 /* My Challenges */
 .my-ch-card {
@@ -533,16 +528,15 @@ textarea { resize: none; }
   padding: 14px 16px; margin-bottom: 8px;
   display: flex; align-items: center; gap: 14px;
 }
-.hi-result { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-.hi-result.win { background: rgba(62,207,142,0.15); }
-.hi-result.loss { background: rgba(242,96,96,0.15); }
-.hi-result.draw { background: rgba(122,143,168,0.15); }
+.hi-result-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.hi-result-icon.win  { background: rgba(62,207,142,0.15); }
+.hi-result-icon.loss { background: rgba(242,96,96,0.15); }
+.hi-result-icon.draw { background: rgba(122,143,168,0.15); }
 .hi-info { flex: 1; }
-.hi-opp { font-weight: 600; font-size: 14px; }
+.hi-matchup { font-weight: 600; font-size: 14px; }
+.hi-vs { color: var(--text-dim); font-size: 12px; margin: 0 4px; }
+.hi-score-line { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text-muted); }
 .hi-meta { font-size: 12px; color: var(--text-muted); }
-.hi-score { font-family: 'Archivo Black', sans-serif; font-size: 18px; text-align: right; }
-.hi-score.win { color: var(--green); }
-.hi-score.loss { color: var(--red); }
 
 /* ==================== UTILITY ==================== */
 .hidden { display: none !important; }
@@ -579,17 +573,25 @@ textarea { resize: none; }
 .empty-text { font-size: 14px; }
 
 /* ==================== LIVE OPPONENT DISPLAY ==================== */
-.opp-live-indicator {
-  background: var(--bg-raised);
-  border: 1px solid var(--border-lit);
-  border-radius: var(--r-sm);
-  padding: 10px 14px;
+/* Kept for backward compat — no longer used directly */
+.opp-live-indicator { display: none; }
+
+/* ── Opponent results block (static, below score-board) ── */
+.opponent-results {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  font-family: 'DM Mono', monospace;
   font-size: 13px;
   color: var(--text-muted);
-  margin-top: 10px;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.opp-live-indicator.active { color: var(--accent); border-color: rgba(232,163,40,0.4); }
+.opponent-results.has-data {
+  color: var(--accent);
+}
 
 /* Resume tab pulse when match is active */
 #resume-tab:not(.hidden) .tab-icon {
@@ -603,19 +605,14 @@ textarea { resize: none; }
 
 /* ==================== MATCH STATUS BAR ==================== */
 .match-status-bar {
-  background: rgba(232,163,40,0.12);
-  border: 1px solid rgba(232,163,40,0.3);
+  background: rgba(232,163,40,0.08);
+  border: 1px solid rgba(232,163,40,0.25);
   border-radius: var(--r-sm);
   padding: 10px 14px;
   text-align: center;
   font-size: 13px;
   color: var(--accent);
-  margin-bottom: 12px;
-  animation: pulse-border 1.5s ease-in-out infinite;
-}
-@keyframes pulse-border {
-  0%, 100% { border-color: rgba(232,163,40,0.3); }
-  50%       { border-color: rgba(232,163,40,0.7); }
+  margin-bottom: 0;
 }
 
 /* ── Feature: Forfeit button ─────────────────────────────────────────────── */
@@ -724,3 +721,34 @@ textarea { resize: none; }
 #rematch-request .btn-secondary {
   width: 100%;
 }
+
+/* ── History: result label ────────────────────────────────────────────────────── */
+.hi-result-label { font-family: 'Archivo Black', sans-serif; font-size: 11px; letter-spacing: 0.06em; text-align: right; }
+.hi-result-label.win  { color: var(--green); }
+.hi-result-label.loss { color: var(--red); }
+.hi-result-label.draw { color: var(--text-muted); }
+
+/* ── My Challenges: waiting row variant ──────────────────────────────────────── */
+.waiting-row { opacity: 0.85; }
+.waiting-row .active-match-label { color: var(--text-muted); }
+.waiting-row .active-match-resume { border-color: var(--border-lit); color: var(--text-muted); }
+.waiting-row .active-match-resume:hover { background: var(--bg-raised); }
+
+/* ── Rematch pending card ─────────────────────────────────────────────────────── */
+.rematch-pending-card { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(79,168,232,0.12); }
+.rematch-pending-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(79,168,232,0.08); border: 1px solid rgba(79,168,232,0.25);
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;
+}
+.rematch-pending-actions { display: flex; gap: 8px; }
+.btn-primary-sm { background: var(--accent); color: #0d1117; font-weight: 700; border-radius: 6px; }
+
+/* ── Toggle switch (moved from inline HTML style) ────────────────────────────── */
+.switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 26px; transition: .2s; }
+.slider::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(22px); }
+.toggle-label { font-size: .9rem; font-weight: 600; }

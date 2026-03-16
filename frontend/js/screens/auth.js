@@ -20,6 +20,8 @@ async function handleGuest() {
       localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
     }
     showUI();
+    WS.connect();
+    EventBus.emit(EVENT_TYPES.APP_SESSION_READY, { userId: STATE.userId });
     showScene('settings');
     showToast('Welcome! Please fill in your profile.', 'info');
   } catch (e) {
@@ -51,6 +53,8 @@ async function handleLogin() {
     } catch {}
 
     showUI();
+    WS.connect();
+    EventBus.emit(EVENT_TYPES.APP_SESSION_READY, { userId: STATE.userId });
     showScene('list-challenge');
     showToast('Welcome back!', 'success');
   } catch (e) {
@@ -75,6 +79,8 @@ async function handleRegister() {
     localStorage.setItem('arrowmatch_userid', data.user_id);
     localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
     showUI();
+    WS.connect();
+    EventBus.emit(EVENT_TYPES.APP_SESSION_READY, { userId: STATE.userId });
     showScene('settings');
     showToast('Account created! Fill in your profile.', 'success');
   } catch (e) {

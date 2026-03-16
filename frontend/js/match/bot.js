@@ -1,29 +1,29 @@
 // =============================================
 // ARROWMATCH — Bot & Mock Data
 // Offline opponent generation and mock challenges.
+// All helpers are module-level (no _ prefix) since
+// set-mode.js and total-mode.js call them directly.
 // Depends on: core/state.js
 // =============================================
 
-const _BOT_SKILL = {
-  'Beginner':     { mean: 5,   dev: 2   },
-  'Intermediate': { mean: 7,   dev: 1.5 },
-  'Skilled':      { mean: 8,   dev: 1   },
-  'Advanced':     { mean: 9,   dev: 0.8 },
-  'Expert':       { mean: 9.5, dev: 0.5 },
+const BOT_SKILL = {
+  'Beginner': { mean: 5,   dev: 2   },
+  'Skilled':  { mean: 8,   dev: 1   },
+  'Master':   { mean: 9.5, dev: 0.5 },
 };
 
-function _genBotArrow(skill) {
-  const { mean, dev } = _BOT_SKILL[skill] || _BOT_SKILL['Skilled'];
+function genBotArrow(skill) {
+  const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);
   return Math.max(0, Math.min(10, v));
 }
 
-function _genBotArrows(skill, count = 3) {
-  return Array.from({ length: count }, () => _genBotArrow(skill));
+function genBotArrows(skill, count = 3) {
+  return Array.from({ length: count }, () => genBotArrow(skill));
 }
 
-function _genBotTotal(myScore, skill) {
-  const { mean, dev } = _BOT_SKILL[skill] || _BOT_SKILL['Skilled'];
+function genBotTotal(myScore, skill) {
+  const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const ratio = mean / 10;
   const base  = Math.round(myScore * ratio + (Math.random() * 2 - 1) * 5);
   return Math.max(0, base);

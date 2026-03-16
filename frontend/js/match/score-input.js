@@ -1,25 +1,26 @@
 // =============================================
 // ARROWMATCH — Score Input UI
 // Arrow cell rendering, numpad handlers, match scene layout.
-// Subscribes to APP_MATCH_STARTED and APP_MATCH_SWITCHED events.
-// Never imports from other modules directly — reacts via EventBus.
+// Handles all match-scene DOM — the only module that touches match overlay HTML.
+//
+// Subscribes to:
+//   APP_MATCH_STARTED, APP_MATCH_SWITCHED, APP_MATCH_COMPLETE
+//   APP_FORFEIT_REQUESTED (two-step confirm logic lives here)
+//   APP_REMATCH_* events (overlay state management)
+//   APP_SHOW_REMATCH_REQUEST, APP_OPP_NAME_UPDATE
+//   WS_OPP_ARROW (live arrow indicator)
 //
 // Depends on: core/state.js, core/event-bus.js, core/utils.js,
 //             match/match-state.js, match/total-mode.js, match/set-mode.js,
-//             match/ws-manager.js
+//             core/ws.js
 // =============================================
 
-// ── EventBus subscriptions ────────────────────────────────────────────────────
+// ── EventBus: match lifecycle ─────────────────────────────────────────────────
 
-// Re-render the full match scene whenever a match is started or switched
-EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored }) => {
-  renderMatchScene();
+EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }) => {
+  if (background) return;
+  renderMatchScene();  // renderMatchScene already restores arrowValues from matchState
   _resetRematchUI();
-  if (restored) {
-    // Restore arrow values that were in-progress before page reload
-    arrowValues = [...(matchState.arrowValues || [])];
-    refreshArrowCells();
-  }
 });
 
 EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
@@ -27,28 +28,43 @@ EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
   renderMatchScene();
 });
 
-// Live opponent arrow indicator (total mode)
 EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value }) => {
   if (STATE.currentMatchId !== matchId) return;
   const ms = STATE.matchState;
-  if (!ms || ms.scoring !== 'total') return;
-  _showOpponentArrowIndicator(ms.oppName, arrow_index, value);
+  if (!ms) return;
+
+  if (ms.scoring === 'total') {
+    _showOpponentArrowIndicator(ms.oppName, arrow_index, value);
+  } else if (ms.scoring === 'sets') {
+    // arrow_index is the position within the current set (0, 1, 2)
+    const setArrows = ms._oppSetArrows || [];
+    setArrows[arrow_index] = value;
+    ms._oppSetArrows = setArrows;
+    _showOppSetLive(ms.oppName, setArrows);
+  }
 });
 
-// Match complete — update UI overlay
-EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, matchState }) => {
+EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, result, tiebreakArrows, matchState }) => {
   if (!wasDisplayed) return;
 
-  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
-
   let icon, title;
-  if (myScore > oppScore)      { icon = '🏆'; title = 'You Win!'; }
-  else if (oppScore > myScore) { icon = '😤'; title = 'Better luck next time'; }
-  else                          { icon = '🤝'; title = "It's a Draw!"; }
+  if (result === 'win')       { icon = '🏆'; title = 'You Win!'; }
+  else if (result === 'loss') { icon = '😤'; title = 'Better luck next time'; }
+  else if (result === 'draw') { icon = '🤝'; title = "It's a Draw!"; }
+  else {
+    if (myScore > oppScore)      { icon = '🏆'; title = 'You Win!'; }
+    else if (oppScore > myScore) { icon = '😤'; title = 'Better luck next time'; }
+    else                         { icon = '🤝'; title = "It's a Draw!"; }
+  }
 
-  const resultLine = matchState.scoring === 'sets'
-    ? `Set points: ${myScore}–${oppScore}`
-    : `Score: ${myScore} vs ${oppScore}`;
+  let resultLine;
+  if (matchState.scoring === 'sets') {
+    resultLine = `Set points: ${myScore}–${oppScore}`;
+  } else if (tiebreakArrows) {
+    resultLine = `Score: ${myScore} vs ${oppScore} · Tiebreak: ${tiebreakArrows.my} vs ${tiebreakArrows.opp}`;
+  } else {
+    resultLine = `Score: ${myScore} vs ${oppScore}`;
+  }
 
   document.getElementById('complete-icon').textContent   = icon;
   document.getElementById('complete-title').textContent  = title;
@@ -56,8 +72,96 @@ EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, 
   document.getElementById('match-complete').classList.remove('hidden');
   _setNumpadDisabled(false);
   _setStatus('');
-
   document.getElementById('forfeit-btn')?.classList.add('hidden');
+});
+
+// ── EventBus: opponent name ───────────────────────────────────────────────────
+
+EventBus.on(EVENT_TYPES.APP_OPP_NAME_UPDATE, ({ matchId, name }) => {
+  if (STATE.currentMatchId !== matchId) return;
+  const el = document.getElementById('ch-opp-name');
+  if (el) el.textContent = name;
+});
+
+// ── EventBus: forfeit two-step confirm ────────────────────────────────────────
+
+let _forfeitConfirming = false;
+let _forfeitTimer      = null;
+
+EventBus.on(EVENT_TYPES.APP_FORFEIT_REQUESTED, () => {
+  const btn = document.getElementById('forfeit-btn');
+  if (!btn) return;
+
+  if (!_forfeitConfirming) {
+    _forfeitConfirming      = true;
+    btn.textContent         = 'Confirm forfeit?';
+    btn.style.background    = 'rgba(242,96,96,0.25)';
+    _forfeitTimer = setTimeout(() => {
+      _forfeitConfirming   = false;
+      btn.textContent      = '✕ Forfeit';
+      btn.style.background = '';
+    }, 4000);
+  } else {
+    clearTimeout(_forfeitTimer);
+    _forfeitConfirming   = false;
+    btn.textContent      = 'Forfeiting…';
+    btn.disabled         = true;
+    btn.style.background = '';
+    EventBus.emit(EVENT_TYPES.APP_FORFEIT_CONFIRMED, {});
+  }
+});
+
+EventBus.on(EVENT_TYPES.APP_FORFEIT_FAILED, () => {
+  const btn = document.getElementById('forfeit-btn');
+  if (btn) { btn.textContent = '✕ Forfeit'; btn.disabled = false; }
+  _forfeitConfirming = false;
+});
+
+// ── EventBus: rematch overlay ─────────────────────────────────────────────────
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_PENDING, () => {
+  document.getElementById('complete-actions')?.classList.add('hidden');
+  document.getElementById('rematch-pending')?.classList.remove('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_PENDING_CANCEL, () => {
+  document.getElementById('complete-actions')?.classList.remove('hidden');
+  document.getElementById('rematch-pending')?.classList.add('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_ACCEPTED_LOCAL, () => {
+  document.getElementById('rematch-request')?.classList.add('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_ACCEPTED_FAIL, () => {
+  document.getElementById('rematch-request')?.classList.remove('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_DECLINED_LOCAL, () => {
+  document.getElementById('rematch-request')?.classList.add('hidden');
+  document.getElementById('complete-actions')?.classList.remove('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_OVERLAY_HIDE, () => {
+  document.getElementById('match-complete')?.classList.add('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_REMATCH_ACTIONS_SHOW, () => {
+  document.getElementById('complete-actions')?.classList.remove('hidden');
+});
+
+EventBus.on(EVENT_TYPES.APP_SHOW_REMATCH_REQUEST, ({ matchId, proposerName }) => {
+  const requestEl = document.getElementById('rematch-request');
+  const textEl    = document.getElementById('rematch-request-text');
+  const actionsEl = document.getElementById('complete-actions');
+  if (!requestEl) return;
+  if (textEl) textEl.textContent = `${proposerName} wants a rematch!`;
+  actionsEl?.classList.add('hidden');
+  requestEl.classList.remove('hidden');
+  // Store match id for accept/decline
+  requestEl.dataset.matchId = matchId;
+  const prev = STATE.lastCompletedMatch;
+  if (prev) prev._rematchMatchId = matchId;
 });
 
 // ── Scene render ──────────────────────────────────────────────────────────────
@@ -66,37 +170,40 @@ function renderMatchScene() {
   const ms = STATE.matchState;
   if (!ms) return;
 
+  _setNumpadDisabled(false);
+
   document.getElementById('ch-my-name').textContent  = ms.myName;
   document.getElementById('ch-opp-name').textContent = ms.oppName;
   document.getElementById('ch-dist').textContent     = ms.dist;
 
-  // Ensure status bar element exists
-  if (!document.getElementById('match-status')) {
-    const el     = document.createElement('div');
-    el.id        = 'match-status';
-    el.className = 'match-status-bar hidden';
-    document.getElementById('score-board')?.prepend(el);
-  }
+  const isTiebreak = ms._tiebreakRequired === true;
+  const isTotal    = ms.scoring === 'total' || isTiebreak;
+  const arrowCount = isTiebreak ? 1 : ms.arrowCount;
 
-  const isTotal = ms.scoring === 'total';
   document.getElementById('total-score-ui').classList.toggle('hidden', !isTotal);
   document.getElementById('set-score-ui').classList.toggle('hidden', isTotal);
 
   if (isTotal) {
-    buildArrowRows(ms.arrowCount);
-    arrowValues      = ms.arrowValues.length ? [...ms.arrowValues] : new Array(ms.arrowCount).fill(null);
+    buildArrowRows(arrowCount);
+    const savedValues = isTiebreak ? [] : ms.arrowValues;
+    arrowValues      = savedValues.length ? [...savedValues] : new Array(arrowCount).fill(null);
     activeArrowIndex = arrowValues.findIndex(v => v === null);
-    if (activeArrowIndex === -1) activeArrowIndex = ms.arrowCount - 1;
+    if (activeArrowIndex === -1) activeArrowIndex = arrowCount - 1;
     refreshArrowCells();
+    updateTotalSum();
+    if (isTiebreak) _setStatus('Sudden death — shoot one arrow! Highest wins.');
   } else {
-    arrowValues = ms.setArrowValues.length ? [...ms.setArrowValues] : new Array(3).fill(null);
     buildSetArrowRow();
+    arrowValues = ms.setArrowValues.length ? [...ms.setArrowValues] : new Array(3).fill(null);
     activeArrowIndex = arrowValues.findIndex(v => v === null);
     if (activeArrowIndex === -1) activeArrowIndex = 2;
     refreshSetArrowCells();
     document.getElementById('set-my-name').textContent  = ms.myName;
     document.getElementById('set-opp-name').textContent = ms.oppName;
     refreshSetScore();
+    // Restore set progress label from state (currentSet is synced from server on page load)
+    const progressEl = document.getElementById('set-progress');
+    if (progressEl) progressEl.textContent = `Set ${ms.currentSet ?? 1}`;
   }
 
   document.getElementById('match-complete').classList.add('hidden');
@@ -104,11 +211,18 @@ function renderMatchScene() {
   const forfeitBtn = document.getElementById('forfeit-btn');
   if (forfeitBtn) {
     forfeitBtn.classList.toggle('hidden', ms.complete || false);
-    forfeitBtn.textContent        = '✕ Forfeit';
-    forfeitBtn.disabled           = false;
-    forfeitBtn.dataset.confirming = 'false';
-    forfeitBtn.style.background   = '';
+    forfeitBtn.textContent = '✕ Forfeit';
+    forfeitBtn.disabled    = false;
+    forfeitBtn.style.background = '';
+    _forfeitConfirming = false;
+    if (_forfeitTimer) { clearTimeout(_forfeitTimer); _forfeitTimer = null; }
   }
+}
+
+function _resetRematchUI() {
+  document.getElementById('complete-actions')?.classList.remove('hidden');
+  document.getElementById('rematch-pending')?.classList.add('hidden');
+  document.getElementById('rematch-request')?.classList.add('hidden');
 }
 
 // ── Arrow cell builders ───────────────────────────────────────────────────────
@@ -143,18 +257,30 @@ function buildSetArrowRow(count = 3) {
     cell.onclick   = () => activateSetCell(i);
     container.appendChild(cell);
   }
-  arrowValues = new Array(count).fill(null);
+  // NOTE: callers are responsible for setting arrowValues before calling refreshSetArrowCells()
 }
 
-function activateCell(idx)    { activeArrowIndex = idx; refreshArrowCells(); }
-function activateSetCell(idx) { activeArrowIndex = idx; refreshSetArrowCells(); }
+function activateCell(idx) {
+  const nextEmpty = arrowValues.findIndex(v => v === null);
+  if (nextEmpty !== -1 && idx > nextEmpty) return;
+  activeArrowIndex = idx;
+  refreshArrowCells();
+}
+
+function activateSetCell(idx) {
+  const nextEmpty = arrowValues.findIndex(v => v === null);
+  if (nextEmpty !== -1 && idx > nextEmpty) return;
+  activeArrowIndex = idx;
+  refreshSetArrowCells();
+}
 
 // ── Cell refresh ──────────────────────────────────────────────────────────────
 
 function refreshArrowCells() {
-  const ms = STATE.matchState;
+  const ms    = STATE.matchState;
   if (!ms) return;
-  for (let i = 0; i < ms.arrowCount; i++) {
+  const count = ms._tiebreakRequired ? 1 : ms.arrowCount;
+  for (let i = 0; i < count; i++) {
     const cell = document.getElementById(`ac-${i}`);
     if (!cell) continue;
     const v = arrowValues[i];
@@ -166,14 +292,12 @@ function refreshArrowCells() {
       else if (v === 9)  cell.classList.add('filled-9');
       else if (v === 8)  cell.classList.add('filled-8');
       else               cell.classList.add('filled');
-    } else {
-      cell.textContent = '';
-    }
+    } else { cell.textContent = ''; }
   }
-  const rowCount = Math.ceil(ms.arrowCount / 3);
+  const rowCount = Math.ceil(count / 3);
   for (let r = 0; r < rowCount; r++) {
     const start  = r * 3;
-    const end    = Math.min(start + 3, ms.arrowCount);
+    const end    = Math.min(start + 3, count);
     const filled = arrowValues.slice(start, end).filter(v => v !== null);
     const rsEl   = document.getElementById(`rs-${r}`);
     if (rsEl) rsEl.textContent = filled.length === (end - start)
@@ -194,9 +318,7 @@ function refreshSetArrowCells() {
       else if (v === 9)  cell.classList.add('filled-9');
       else if (v === 8)  cell.classList.add('filled-8');
       else               cell.classList.add('filled');
-    } else {
-      cell.textContent = '';
-    }
+    } else { cell.textContent = ''; }
   }
 }
 
@@ -215,28 +337,23 @@ function refreshSetScore() {
 // ── Numpad handlers ───────────────────────────────────────────────────────────
 
 function numInput(val) {
-  if (STATE.matchState?.scoring === 'sets') {
-    numInputSet(val);
-  } else {
-    numInputTotal(val);
-  }
+  if (STATE.matchState?.scoring === 'sets') numInputSet(val);
+  else                                      numInputTotal(val);
   saveMatchState();
 }
 
 function numInputTotal(val) {
-  const ms = STATE.matchState;
-  if (activeArrowIndex >= ms.arrowCount) return;
+  const ms    = STATE.matchState;
+  const count = ms._tiebreakRequired ? 1 : ms.arrowCount;
+  if (activeArrowIndex >= count) return;
   const prevIdx = activeArrowIndex;
   arrowValues[activeArrowIndex] = val;
-  ms.arrowValues = [...arrowValues];
-  const next = arrowValues.findIndex((v, i) => i > activeArrowIndex && v === null);
-  activeArrowIndex = next === -1 ? ms.arrowCount - 1 : next;
+  if (!ms._tiebreakRequired) ms.arrowValues = [...arrowValues];
+  const next = arrowValues.findIndex(v => v === null);
+  activeArrowIndex = next === -1 ? count - 1 : next;
   refreshArrowCells();
   updateTotalSum();
-
-  // Notify opponent of live arrow (event-driven send through WS manager)
   sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
-
   checkTotalComplete();
 }
 
@@ -244,15 +361,18 @@ function numInputSet(val) {
   const ms     = STATE.matchState;
   const maxIdx = arrowValues.length - 1;
   if (activeArrowIndex > maxIdx) return;
+  const prevIdx = activeArrowIndex;
   arrowValues[activeArrowIndex] = val;
   ms.setArrowValues = [...arrowValues];
   const next = arrowValues.findIndex((v, i) => i > activeArrowIndex && v === null);
   activeArrowIndex = next === -1 ? maxIdx : next;
   refreshSetArrowCells();
-  if (arrowValues.every(v => v !== null)) {
+  // Stream arrow to opponent (arrow_index is set-relative: 0, 1, 2)
+  sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
+  if (arrowValues.length > 0 && arrowValues.every(v => v !== null)) {
     setTimeout(() => {
-      if (ms._tiebreak || ms._tiebreakTotal) resolveTiebreak();
-      else                                   resolveSet();
+      if (ms._tiebreak) resolveTiebreak();
+      else              resolveSet();
     }, 400);
   }
 }
@@ -264,16 +384,17 @@ function numDel() {
 }
 
 function numDelTotal() {
-  const ms = STATE.matchState;
-  let target = activeArrowIndex;
+  const ms    = STATE.matchState;
+  const count = ms._tiebreakRequired ? 1 : ms.arrowCount;
+  let target  = activeArrowIndex;
   if (arrowValues[target] === null) {
     for (let i = target - 1; i >= 0; i--) {
       if (arrowValues[i] !== null) { target = i; break; }
     }
   }
   arrowValues[target] = null;
-  ms.arrowValues      = [...arrowValues];
-  activeArrowIndex    = target;
+  if (!ms._tiebreakRequired) ms.arrowValues = [...arrowValues];
+  activeArrowIndex = target;
   refreshArrowCells();
   updateTotalSum();
 }
@@ -285,9 +406,9 @@ function numDelSet() {
       if (arrowValues[i] !== null) { target = i; break; }
     }
   }
-  arrowValues[target]              = null;
-  STATE.matchState.setArrowValues  = [...arrowValues];
-  activeArrowIndex                 = target;
+  arrowValues[target]             = null;
+  STATE.matchState.setArrowValues = [...arrowValues];
+  activeArrowIndex                = target;
   refreshSetArrowCells();
 }
 
@@ -295,15 +416,30 @@ function numDelSet() {
 
 async function _submitScoreToServer(arrows) {
   const ms = STATE.matchState;
-  if (!ms?.id || ms.isBot) return;
-  const payload = { arrows: arrows.map((value, arrow_index) => ({ arrow_index, value })) };
-  try {
-    await api('POST', `/api/matches/${ms.id}/score`, payload);
-  } catch (e) {
-    console.warn('Score submit failed:', e.message);
+  if (!ms?.id || ms.isBot) return true;
+  if (ms.id === ms.challengeId) {
+    _setStatus('Waiting for opponent to join…');
+    _setNumpadDisabled(false);
+    return null;
   }
-  // Notify opponent score is done
-  sendMatchMessage({ type: 'score_submitted' });
+  const clean = arrows
+    .map((v, i) => ({ arrow_index: i, value: v }))
+    .filter(a => a.value !== null && a.value !== undefined);
+  if (clean.length === 0) { _setNumpadDisabled(false); return null; }
+
+  try {
+    return await api('POST', `/api/matches/${ms.id}/score`, { arrows: clean });
+  } catch (e) {
+    if (e?.status === 404) {
+      _setNumpadDisabled(true);
+      _setStatus('This match is no longer available.');
+      return null;
+    }
+    showToast(e.message || 'Could not submit score — try again', 'error');
+    _setNumpadDisabled(false);
+    _setStatus('');
+    return null;
+  }
 }
 
 // ── Status / numpad helpers ───────────────────────────────────────────────────
@@ -317,28 +453,45 @@ function _setNumpadDisabled(disabled) {
   document.querySelectorAll('.num-btn').forEach(b => { b.disabled = disabled; });
 }
 
-// ── Opponent arrow live indicator ─────────────────────────────────────────────
+// ── Opponent live indicator ───────────────────────────────────────────────────
 
-function _showOpponentArrowIndicator(oppName, arrowIndex, value) {
-  const indicator = document.getElementById('opp-live-indicator');
-  if (!indicator) return;
-  indicator.classList.remove('hidden');
-  indicator.classList.add('active');
-  indicator.textContent = `${oppName}: arrow ${arrowIndex + 1} → ${value}`;
-  clearTimeout(indicator._hideTimer);
-  indicator._hideTimer = setTimeout(() => {
-    indicator.classList.remove('active');
-    indicator.textContent = `${oppName} is shooting…`;
-  }, 2500);
+function _oppIndicatorShow(text) {
+  const el = document.getElementById('opponent-results');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.classList.add('has-data');
+  el.textContent = text;
 }
 
+function _oppIndicatorHide() {
+  const el = document.getElementById('opponent-results');
+  if (!el) return;
+  el.classList.add('hidden');
+  el.classList.remove('has-data');
+  el.textContent = '';
+}
+
+// Total mode: "Brave: arrow 2 → 9" — static, stays until next arrow or scene change
+function _showOpponentArrowIndicator(oppName, arrowIndex, value) {
+  _oppIndicatorShow(`${oppName}: arrow ${arrowIndex + 1} → ${value}`);
+}
+
+// Sets mode post-resolve summary: "Brave: 10 9 10 = 29 pts"
 function _showOppSetArrows(oppTotal, arrows) {
-  const ms        = STATE.matchState;
-  const indicator = document.getElementById('opp-live-indicator');
-  if (!indicator) return;
-  indicator.classList.remove('hidden');
+  const ms = STATE.matchState;
   const arrowStr = arrows.length ? arrows.join(' ') + ' = ' : '';
-  indicator.textContent = `${ms?.oppName || 'Opp'}: ${arrowStr}${oppTotal} pts`;
-  clearTimeout(indicator._hideTimer);
-  indicator._hideTimer = setTimeout(() => indicator.classList.add('hidden'), 3500);
+  _oppIndicatorShow(`${ms?.oppName || 'Opp'}: ${arrowStr}${oppTotal} pts`);
+}
+
+/**
+ * Sets mode live progress: "Brave: [10, 9, –]: 19"
+ * setArrows: sparse array indexed 0-2, missing values shown as –
+ * Static — stays until _nextSet() clears it.
+ */
+function _showOppSetLive(oppName, setArrows) {
+  const slots  = [0, 1, 2].map(i => setArrows[i] != null ? setArrows[i] : '–');
+  const filled = setArrows.filter(v => v != null);
+  const total  = filled.reduce((a, b) => a + b, 0);
+  const totalStr = filled.length > 0 ? `: ${total}` : '';
+  _oppIndicatorShow(`${oppName}: [${slots.join(', ')}]${totalStr}`);
 }

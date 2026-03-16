@@ -4,10 +4,11 @@
 // Depends on: core/state.js, core/api.js, core/utils.js
 // =============================================
 
-async function saveToHistory(ms) {
+function saveToHistory(ms) {
   const entry = {
     id:       `h-${Date.now()}`,
-    oppName:  ms.oppName,
+    myName:   ms.myName  || STATE.profile?.name || 'You',
+    oppName:  ms.oppName || 'Opponent',
     dist:     ms.dist,
     scoring:  ms.scoring,
     myScore:  ms.myFinalScore  || 0,
@@ -30,14 +31,17 @@ async function refreshHistory() {
     ]);
     if (histData) {
       STATE.history = histData.map(h => ({
-        id:       h.match_id,
-        oppName:  h.opponent_name,
-        dist:     h.distance,
-        scoring:  h.scoring,
-        myScore:  h.my_score || 0,
-        oppScore: h.opponent_score || 0,
-        result:   h.result,
-        date:     h.date,
+        id:              h.match_id,
+        myName:          STATE.profile?.name || 'You',
+        oppName:         h.opponent_name,
+        dist:            h.distance,
+        scoring:         h.scoring,
+        myScore:         h.my_score || 0,
+        oppScore:        h.opponent_score || 0,
+        tbMyArrow:       h.tiebreak_my_arrow  ?? null,
+        tbOppArrow:      h.tiebreak_opp_arrow ?? null,
+        result:          h.result,
+        date:            h.date,
       }));
       localStorage.setItem('arrowmatch_history', JSON.stringify(STATE.history));
     }
@@ -87,17 +91,27 @@ function renderAchievements(serverBadges = null) {
 function renderHistoryList() {
   const container = document.getElementById('history-list');
   if (STATE.history.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">◷</div><p class="empty-text">No matches played yet</p></div>`;
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">◷</div><p class="empty-text">No matches played yet</p></div>';
     return;
   }
   const icons = { win: '✓', loss: '✗', draw: '=' };
-  container.innerHTML = STATE.history.slice(0, 30).map(h => `
-    <div class="history-item">
-      <div class="hi-result ${h.result}">${icons[h.result]}</div>
+  container.innerHTML = STATE.history.slice(0, 30).map(h => {
+    const myName   = escHtml(h.myName  || STATE.profile?.name || 'You');
+    const oppName  = escHtml(h.oppName || 'Opponent');
+    const scoring  = h.scoring === 'sets' ? 'Sets' : 'Total';
+    const scoreStr = h.tbMyArrow != null
+      ? `${h.myScore} – ${h.oppScore} · 🎯 ${h.tbMyArrow} vs ${h.tbOppArrow}`
+      : `${h.myScore} – ${h.oppScore}`;
+    const icon     = icons[h.result] || '?';
+    return `
+    <div class="history-item ${h.result}">
+      <div class="hi-result-icon ${h.result}">${icon}</div>
       <div class="hi-info">
-        <div class="hi-opp">${escHtml(h.oppName)}</div>
-        <div class="hi-meta">${h.dist} · ${h.scoring === 'sets' ? 'Sets' : 'Total'} · ${formatDate(new Date(h.date))}</div>
+        <div class="hi-matchup">${myName} <span class="hi-vs">vs</span> ${oppName}</div>
+        <div class="hi-score-line">${scoreStr}</div>
+        <div class="hi-meta">${h.dist || '—'} · ${scoring} · ${formatDate(new Date(h.date))}</div>
       </div>
-      <div class="hi-score ${h.result}">${h.myScore}</div>
-    </div>`).join('');
+      <div class="hi-result-label ${h.result}">${h.result.toUpperCase()}</div>
+    </div>`;
+  }).join('');
 }
