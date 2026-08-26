@@ -35,6 +35,9 @@ EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }
 });
 
 EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
+  // The opponent-results element is shared by all match views. Do not carry
+  // the previous match's live arrow summary into the match being resumed.
+  _oppIndicatorHide();
   arrowValues = [...(matchState.arrowValues || [])];
   renderMatchScene();
 });
