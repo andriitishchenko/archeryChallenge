@@ -47,14 +47,24 @@ function _botAveragePerArrow() {
   return scores.reduce((sum, score) => sum + score, 0) / scores.length;
 }
 
+function _botCurrentMatchAverage(ms) {
+  const scores = Array.isArray(ms?._botPlayerRoundAverages)
+    ? ms._botPlayerRoundAverages.filter(Number.isFinite)
+    : [];
+  if (!scores.length) return null;
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
 function _botShadowMean(ms) {
   const profile = BOT_SKILL[ms.oppSkill || 'Skilled'] || BOT_SKILL['Skilled'];
-  const playerAverage = _botAveragePerArrow();
-  // The player's average is the main reference, while bot skill still makes
-  // Beginner/Master opponents meaningfully different for new players.
+  const historicalAverage = _botAveragePerArrow();
+  const currentMatchAverage = _botCurrentMatchAverage(ms);
+  const playerAverage = currentMatchAverage ?? historicalAverage;
+  // Current-match performance is the strongest reference. Historical results
+  // still help during the first round, while bot skill keeps new matches varied.
   const mean = playerAverage === null
     ? profile.mean
-    : playerAverage * 0.7 + profile.mean * 0.3;
+    : playerAverage * (currentMatchAverage === null ? 0.7 : 0.9) + profile.mean * (currentMatchAverage === null ? 0.3 : 0.1);
   return _botClamp(mean);
 }
 
@@ -69,6 +79,7 @@ function _botShadowRound(ms, round, count) {
       count,
       mean: _botShadowMean(ms),
       arrows: new Array(count).fill(null),
+      playerArrows: new Array(count).fill(null),
     };
   }
   return ms._botShadow;
@@ -85,12 +96,21 @@ function _botShadowRoundName(ms) {
 function botShadowShoot(ms, index, userValue, count) {
   if (!ms?.isBot) return [];
   const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
+  if (Number.isFinite(userValue)) state.playerArrows[index] = userValue;
   if (state.arrows[index] == null) {
-    const userInfluence = Number.isFinite(userValue)
-      ? (userValue - state.mean) * 0.35 : 0;
-    const jitter = (Math.random() * 2 - 1) * 1.25;
+    const entered = state.playerArrows.filter(value => Number.isFinite(value));
+    const enteredMean = entered.length
+      ? entered.reduce((sum, value) => sum + value, 0) / entered.length
+      : null;
+    // Mirror the live series immediately. This is deliberately driven by the
+    // current input, not only by old history, so a run of 10s is visible as a
+    // run near 10s on the opponent side before submission.
+    const reference = enteredMean === null
+      ? state.mean
+      : enteredMean * 0.8 + state.mean * 0.2;
+    const jitter = (Math.random() * 2 - 1) * 0.8;
     state.arrows[index] = Math.round(_botClamp(
-      state.mean + userInfluence + jitter,
+      reference + jitter,
     ));
   }
   return [...state.arrows];
@@ -99,6 +119,7 @@ function botShadowShoot(ms, index, userValue, count) {
 function botShadowDelete(ms, index, count) {
   if (!ms?.isBot) return [];
   const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
+  state.playerArrows[index] = null;
   state.arrows[index] = null;
   return [...state.arrows];
 }
@@ -120,23 +141,28 @@ function botShadowFinalize(ms, userTotal, count) {
   if (!ms?.isBot) return [];
   const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
   const arrows = state.arrows.map(value => value == null
-    ? Math.round(_botClamp(state.mean + (Math.random() * 2 - 1) * 1.25))
+    ? Math.round(_botClamp(state.mean + (Math.random() * 2 - 1) * 0.8))
     : value);
   const maximum = count * 10;
-  const baseline = state.mean * count;
-  const blended = baseline * 0.65 + userTotal * 0.35;
-  let target = Math.round(blended + (Math.random() * 2 - 1) * Math.max(2, count * 0.25));
+  const playerMean = Number.isFinite(userTotal) && count > 0 ? userTotal / count : state.mean;
+  const baseline = playerMean * count;
+  let target = Math.round(baseline + (Math.random() * 2 - 1) * Math.max(1, count * 0.12));
 
   // Roughly one quarter of rounds deliberately give the bot a narrow edge;
   // another quarter gives the player an edge. The remaining rounds follow
-  // the adaptive average and current performance.
+  // the player's current performance with a small natural variation.
   const outcome = Math.random();
-  const margin = _botRandomInt(1, Math.max(2, Math.round(count * 0.4)));
+  const margin = _botRandomInt(1, Math.max(1, Math.round(count * 0.2)));
   if (outcome < 0.25) target = userTotal + margin;
   else if (outcome < 0.50) target = userTotal - margin;
   target = Math.round(_botClamp(target, 0, maximum));
 
   state.arrows = _botMoveToTarget(arrows, target);
+  if (Number.isFinite(playerMean)) {
+    if (!Array.isArray(ms._botPlayerRoundAverages)) ms._botPlayerRoundAverages = [];
+    ms._botPlayerRoundAverages.push(playerMean);
+    if (ms._botPlayerRoundAverages.length > 20) ms._botPlayerRoundAverages.shift();
+  }
   return [...state.arrows];
 }
 
