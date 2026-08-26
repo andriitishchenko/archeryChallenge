@@ -409,6 +409,25 @@ async function _fetchAndResolveMatch(matchId) {
       return;
     }
 
+    if (isSets && isActive) {
+      // Status recovery also repairs a normal set when concurrent submissions
+      // left both arrows persisted without a set_resolved websocket event.
+      delete ms._pendingSetNumber;
+      renderMatchScene();
+      if (status.my_submitted && !status.opp_submitted) {
+        ms._pendingSetNumber = status.current_set;
+        _setNumpadDisabled(true);
+        _setStatus(`Set ${status.current_set}: your arrows recorded — waiting for ${escHtml(ms.oppName)}…`);
+      } else if (status.opp_submitted && !status.my_submitted) {
+        _setNumpadDisabled(false);
+        _setStatus(`${escHtml(ms.oppName)} already submitted set ${status.current_set} — shoot your arrows!`);
+      } else {
+        _setNumpadDisabled(false);
+        _setStatus(status.judge_status || '');
+      }
+      return;
+    }
+
   } catch (err) {
     if (err?.status === 404) {
       const isActive = STATE.currentMatchId === matchId;

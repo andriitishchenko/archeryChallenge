@@ -36,6 +36,9 @@ EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId, set_number, set_total }) =>
       _setNumpadDisabled(true);
       _setStatus(`Set ${set_number || ms._pendingSetNumber}: both submissions received — calculating result…`);
     }
+    // Recover the authoritative next set when both near-simultaneous POSTs
+    // missed each other's rows and no set_resolved event was emitted.
+    _fetchAndResolveMatch(matchId);
   } else if (isActive) {
     const totalStr = set_total !== undefined ? ` (${set_total} pts)` : '';
     _setStatus(`${escHtml(ms.oppName)} submitted set ${set_number || ''}${totalStr} — waiting for your arrows…`);

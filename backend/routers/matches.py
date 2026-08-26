@@ -123,6 +123,55 @@ def _reconcile_ready_set_tiebreak(
     db.commit()
 
 
+def _reconcile_ready_set(
+    match: Match,
+    me: MatchParticipant,
+    opp: Optional[MatchParticipant],
+    db: Session,
+) -> None:
+    """Resolve a complete set left behind by concurrent submissions."""
+    if not opp or match.status == "complete":
+        return
+    if _set_tiebreak_active(match, db):
+        _reconcile_ready_set_tiebreak(match, me, opp, db)
+        return
+
+    current_set = _last_resolved_set(match, db) + 1
+    rows = {
+        participant.id: db.query(ArrowScore).filter(
+            ArrowScore.participant_id == participant.id,
+            ArrowScore.set_number == current_set,
+        ).order_by(ArrowScore.arrow_index).all()
+        for participant in (me, opp)
+    }
+    if not rows[me.id] or not rows[opp.id]:
+        return
+
+    my_total = sum(row.value for row in rows[me.id])
+    opp_total = sum(row.value for row in rows[opp.id])
+    if my_total > opp_total:
+        next_first = opp.user_id
+    elif opp_total > my_total:
+        next_first = me.user_id
+    else:
+        next_first = match.first_to_act
+
+    me.final_score = count_set_points(me, match.id, db)
+    opp.final_score = count_set_points(opp, match.id, db)
+    match.first_to_act = next_first
+
+    # A tied 6:6 set is intentionally left active; status serialization will
+    # expose the set-system sudden-death state on the next response.
+    if me.final_score >= 6 or opp.final_score >= 6:
+        if me.final_score != opp.final_score:
+            me.result = MatchResultEnum.win if me.final_score > opp.final_score else MatchResultEnum.loss
+            opp.result = MatchResultEnum.loss if me.result == MatchResultEnum.win else MatchResultEnum.win
+            match.status = "complete"
+            match.completed_at = datetime.utcnow()
+
+    db.commit()
+
+
 # ── Set-system ────────────────────────────────────────────────────────────────
 
 @router.post("/matches/{match_id}/set", response_model=SetResult)
@@ -611,7 +660,7 @@ def get_match_status(
     challenge = match.challenge
     scoring   = challenge.scoring.value if challenge else "total"
     if scoring == "sets":
-        _reconcile_ready_set_tiebreak(match, me, opp, db)
+        _reconcile_ready_set(match, me, opp, db)
         db.refresh(match)
     result    = me.result.value if me.result != MatchResultEnum.pending else None
 

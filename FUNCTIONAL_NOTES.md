@@ -66,7 +66,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Set submission → stores the set arrows and resolves the set when both players submit the same set → points follow 2 for win, 1 for draw, 0 for loss; first to 6 wins.
 - Set score reaches 6:6 → persists Set System sudden death as set_number=0, broadcasts the authoritative 6:6 score and enters one-arrow input on both clients → set points remain 6:6, equal arrows reset the round, and a non-equal pair completes the parent match.
 - Set arrow submission → disables the local score buttons until the opponent result event or status response arrives → the client never resubmits cleared arrows and cannot send an empty set that the API rejects with 422.
-- Both sudden-death arrows persisted without a resolution event → the next status request reconciles the ready pair, and waiting clients retry status briefly → the round resolves or resets instead of remaining on “Both submitted — calculating result…”.
+- Both set or sudden-death arrows persisted without a resolution event → the next status request reconciles the ready pair, and waiting clients retry status briefly → the set advances/resolves or the sudden-death round resets instead of remaining on “Both submitted — calculating result…”.
 - Completed Set System sudden death → the result popup renders the set points and the final sudden-death arrow score → the sudden-death line is omitted when no tiebreak occurred.
 - Forfeit → marks the player as loss, the opponent as win, completes the match, and notifies the opponent → a completed match cannot be forfeited again.
 - Match inactivity → expiry worker completes a stale no-activity match as draw or awards win/loss to the timely submitter → notifications explain the timeout.
