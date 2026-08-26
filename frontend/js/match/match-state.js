@@ -397,6 +397,7 @@ async function _fetchAndResolveMatch(matchId) {
     }
 
     if (isSetTiebreak && isActive) {
+      delete ms._pendingSetNumber;
       ms._pendingTiebreak = status.my_submitted || false;
       renderMatchScene();
       _setNumpadDisabled(status.my_submitted && !status.opp_submitted);
@@ -426,6 +427,11 @@ async function _fetchAndResolveMatch(matchId) {
       } else if (status.opp_submitted && !status.my_submitted) {
         _setNumpadDisabled(false);
         _setStatus(`${escHtml(ms.oppName)} already submitted set ${status.current_set} — shoot your arrows!`);
+      } else if (status.my_submitted && status.opp_submitted) {
+        ms._pendingSetNumber = status.current_set;
+        _setNumpadDisabled(true);
+        _setStatus(`Set ${status.current_set}: both submissions received — calculating result…`);
+        _scheduleSetResolutionRecovery(matchId);
       } else {
         _setNumpadDisabled(false);
         _setStatus(status.judge_status || '');

@@ -43,24 +43,45 @@ router = APIRouter(prefix="/api", tags=["matches"])
 
 
 def _last_resolved_set(match: Match, db: Session) -> int:
-    """Return the last positive-numbered set submitted by both players."""
+    """Return the last set whose points were applied to both participants."""
     participants = [p for p in match.participants if not p.is_bot]
     if len(participants) != 2:
         return 0
 
-    def _numbers(participant_id: int) -> set[int]:
-        return {
-            row.set_number
-            for row in db.query(ArrowScore.set_number)
+    totals = []
+    for participant in participants:
+        totals.append({
+            row.set_number: row.total
+            for row in db.query(
+                ArrowScore.set_number,
+                func.sum(ArrowScore.value).label("total"),
+            )
             .filter(
-                ArrowScore.participant_id == participant_id,
+                ArrowScore.participant_id == participant.id,
                 ArrowScore.set_number > 0,
             )
-            .distinct()
+            .group_by(ArrowScore.set_number)
             .all()
-        }
+        })
 
-    return max(_numbers(participants[0].id) & _numbers(participants[1].id), default=0)
+    # A concurrent pair can leave both rows for the current set persisted
+    # while final_score still contains the previous set points. Only count a
+    # common set as resolved when the running points match both stored scores.
+    resolved_points = [0, 0]
+    last_resolved = 0
+    stored_points = [participant.final_score or 0 for participant in participants]
+    for set_number in sorted(set(totals[0]) & set(totals[1])):
+        if totals[0][set_number] > totals[1][set_number]:
+            resolved_points[0] += 2
+        elif totals[1][set_number] > totals[0][set_number]:
+            resolved_points[1] += 2
+        else:
+            resolved_points[0] += 1
+            resolved_points[1] += 1
+        if resolved_points == stored_points:
+            last_resolved = set_number
+
+    return last_resolved
 
 
 def _set_tiebreak_active(match: Match, db: Session) -> bool:
@@ -74,10 +95,9 @@ def _set_tiebreak_active(match: Match, db: Session) -> bool:
     participants = [p for p in match.participants if not p.is_bot]
     if len(participants) != 2:
         return False
-    return (
-        count_set_points(participants[0], match.id, db) == 6
-        and count_set_points(participants[1], match.id, db) == 6
-    )
+    # Use the stored points, not a raw ArrowScore aggregation: a race can
+    # persist both current-set rows before either request applies their points.
+    return participants[0].final_score == 6 and participants[1].final_score == 6
 
 
 def _reconcile_ready_set_tiebreak(
@@ -136,40 +156,46 @@ def _reconcile_ready_set(
         _reconcile_ready_set_tiebreak(match, me, opp, db)
         return
 
-    current_set = _last_resolved_set(match, db) + 1
-    rows = {
-        participant.id: db.query(ArrowScore).filter(
-            ArrowScore.participant_id == participant.id,
-            ArrowScore.set_number == current_set,
-        ).order_by(ArrowScore.arrow_index).all()
-        for participant in (me, opp)
-    }
-    if not rows[me.id] or not rows[opp.id]:
-        return
+    while True:
+        current_set = _last_resolved_set(match, db) + 1
+        rows = {
+            participant.id: db.query(ArrowScore).filter(
+                ArrowScore.participant_id == participant.id,
+                ArrowScore.set_number == current_set,
+            ).order_by(ArrowScore.arrow_index).all()
+            for participant in (me, opp)
+        }
+        if not rows[me.id] or not rows[opp.id]:
+            return
 
-    my_total = sum(row.value for row in rows[me.id])
-    opp_total = sum(row.value for row in rows[opp.id])
-    if my_total > opp_total:
-        next_first = opp.user_id
-    elif opp_total > my_total:
-        next_first = me.user_id
-    else:
-        next_first = match.first_to_act
+        my_total = sum(row.value for row in rows[me.id])
+        opp_total = sum(row.value for row in rows[opp.id])
+        if my_total > opp_total:
+            next_first = opp.user_id
+        elif opp_total > my_total:
+            next_first = me.user_id
+        else:
+            next_first = match.first_to_act
 
-    me.final_score = count_set_points(me, match.id, db)
-    opp.final_score = count_set_points(opp, match.id, db)
-    match.first_to_act = next_first
+        me.final_score = count_set_points(me, match.id, db)
+        opp.final_score = count_set_points(opp, match.id, db)
+        match.first_to_act = next_first
 
-    # A tied 6:6 set is intentionally left active; status serialization will
-    # expose the set-system sudden-death state on the next response.
-    if me.final_score >= 6 or opp.final_score >= 6:
-        if me.final_score != opp.final_score:
-            me.result = MatchResultEnum.win if me.final_score > opp.final_score else MatchResultEnum.loss
-            opp.result = MatchResultEnum.loss if me.result == MatchResultEnum.win else MatchResultEnum.win
-            match.status = "complete"
-            match.completed_at = datetime.utcnow()
+        # A tied 6:6 set is intentionally left active; status serialization
+        # will expose the set-system sudden-death state on the next response.
+        if me.final_score >= 6 or opp.final_score >= 6:
+            if me.final_score != opp.final_score:
+                me.result = MatchResultEnum.win if me.final_score > opp.final_score else MatchResultEnum.loss
+                opp.result = MatchResultEnum.loss if me.result == MatchResultEnum.win else MatchResultEnum.win
+                match.status = "complete"
+                match.completed_at = datetime.utcnow()
 
-    db.commit()
+        db.commit()
+        if match.status == "complete":
+            return
+        if _set_tiebreak_active(match, db):
+            _reconcile_ready_set_tiebreak(match, me, opp, db)
+            return
 
 
 # ── Set-system ────────────────────────────────────────────────────────────────

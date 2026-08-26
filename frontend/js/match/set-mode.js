@@ -7,6 +7,21 @@
 // =============================================
 
 const _setTiebreakPollTimers = {};
+const _setResolutionPollTimers = {};
+
+function _scheduleSetResolutionRecovery(matchId, attempt = 0) {
+  if (_setResolutionPollTimers[matchId]) return;
+  _setResolutionPollTimers[matchId] = setTimeout(async () => {
+    delete _setResolutionPollTimers[matchId];
+    const ms = STATE.activeMatches[matchId];
+    if (!ms || ms.complete || ms._pendingSetNumber === undefined || attempt >= 60) return;
+    await _fetchAndResolveMatch(matchId);
+    const current = STATE.activeMatches[matchId];
+    if (current && !current.complete && current._pendingSetNumber !== undefined) {
+      _scheduleSetResolutionRecovery(matchId, attempt + 1);
+    }
+  }, 1000);
+}
 
 function _scheduleSetTiebreakRecovery(matchId, attempt = 0) {
   if (_setTiebreakPollTimers[matchId]) return;
@@ -39,6 +54,7 @@ EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId, set_number, set_total }) =>
     // Recover the authoritative next set when both near-simultaneous POSTs
     // missed each other's rows and no set_resolved event was emitted.
     _fetchAndResolveMatch(matchId);
+    _scheduleSetResolutionRecovery(matchId);
   } else if (isActive) {
     const totalStr = set_total !== undefined ? ` (${set_total} pts)` : '';
     _setStatus(`${escHtml(ms.oppName)} submitted set ${set_number || ''}${totalStr} — waiting for your arrows…`);
@@ -239,6 +255,7 @@ function _applySetResult(result, targetMatchId) {
       _setNumpadDisabled(true);
       _setStatus(result.judge_status || `Set ${result.set_number}: your arrows recorded. Waiting for ${ms.oppName}…`);
     }
+    _scheduleSetResolutionRecovery(mid);
     return;
   }
 
