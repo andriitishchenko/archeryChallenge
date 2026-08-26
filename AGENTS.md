@@ -28,4 +28,9 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Review `git diff --check` and the final diff before handoff.
 - Never reset, discard, overwrite, or delete unrelated files, databases, or user changes.
 
+## Commit policy
+
+- After completing a task and its checks, commit the task changes automatically unless the user explicitly asks to leave them uncommitted.
+- Keep unrelated pre-existing changes out of the automatic commit.
+
 For the repository architecture, commands, and detailed conventions, read `CLAUDE.md` and `README.md`.
