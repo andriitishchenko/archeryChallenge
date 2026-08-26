@@ -96,6 +96,7 @@ EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value, arrows }) 
 
 EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, result, tiebreakArrows, matchState }) => {
   if (!wasDisplayed) return;
+  const decidingArrows = tiebreakArrows || matchState?._tiebreakArrows || null;
 
   // Bot finalisation can adjust the live preview to the final target total.
   // Render that exact array again so the displayed arrows and result cannot
@@ -126,9 +127,9 @@ EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, 
     : `Score: ${myScore} vs ${oppScore}`;
   resultEl.appendChild(resultLine);
 
-  if (tiebreakArrows?.my != null && tiebreakArrows?.opp != null) {
+  if (decidingArrows?.my != null && decidingArrows?.opp != null) {
     const tiebreakLine = document.createElement('div');
-    tiebreakLine.textContent = `Sudden death: ${tiebreakArrows.my}–${tiebreakArrows.opp}`;
+    tiebreakLine.textContent = `Sudden death: ${decidingArrows.my}–${decidingArrows.opp}`;
     resultEl.appendChild(tiebreakLine);
   }
 
