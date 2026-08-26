@@ -69,9 +69,20 @@ async function checkTotalComplete() {
   ms._totalSubmitting = true;
 
   if (ms.isBot) {
-    const botScore = genBotTotal(myScore, ms.oppSkill || 'Skilled');
-    if (myScore === botScore) { _doBotTiebreak(myScore); }
-    else                      { completeMatch(myScore, botScore, ms.id); }
+    const botArrows = botShadowFinalize(ms, myScore, count);
+    _showOpponentArrowIndicator(ms.oppName, botArrows);
+    const botScore = botArrows.reduce((sum, value) => sum + value, 0);
+    if (myScore === botScore) {
+      if (ms._tiebreakRequired) _doBotTiebreak(ms._botTiebreakBaseScore || 0);
+      else                      _doBotTiebreak(myScore);
+    } else if (ms._tiebreakRequired) {
+      const baseScore = ms._botTiebreakBaseScore || 0;
+      const myFinal = baseScore + (myScore > botScore ? 1 : 0);
+      const oppFinal = baseScore + (botScore > myScore ? 1 : 0);
+      completeMatch(myFinal, oppFinal, ms.id);
+    } else {
+      completeMatch(myScore, botScore, ms.id);
+    }
     return;
   }
 
@@ -124,21 +135,15 @@ function _doBotTiebreak(baseScore) {
   const ms = STATE.matchState;
   if (!ms) return;
 
-  const myArrow  = Math.floor(Math.random() * 11);
-  const botArrow = Math.floor(Math.random() * 11);
-
-  if (myArrow === botArrow) {
-    showToast('Both shot ' + myArrow + '! Shoot one more.', 'info');
-    arrowValues = [null]; activeArrowIndex = 0;
-    buildArrowRows(1);
-    refreshArrowCells();
-    _setNumpadDisabled(false);
-    _setStatus('Tiebreak — sudden death! One arrow each.');
-    return;
-  }
-
-  const myWins   = myArrow > botArrow;
-  const myFinal  = baseScore + (myWins  ? 1 : 0);
-  const oppFinal = baseScore + (!myWins ? 1 : 0);
-  completeMatch(myFinal, oppFinal, ms.id);
+  ms._tiebreakRequired = true;
+  ms._tiebreakSubmitted = false;
+  ms._botTiebreakBaseScore = baseScore;
+  ms._totalSubmitting = false;
+  ms._botShadow = null;
+  arrowValues = [null];
+  activeArrowIndex = 0;
+  _oppIndicatorHide();
+  renderMatchScene();
+  _setNumpadDisabled(false);
+  _setStatus('Tiebreak — sudden death! Shoot one arrow.');
 }

@@ -101,7 +101,7 @@ Frontend responsibilities:
 - `frontend/js/match/` owns match state and scoring modes; `score-input.js` is the DOM-facing match renderer.
 - `frontend/js/screens/` owns auth, settings, challenges, and history screens.
 
-Persisted match and challenge state is authoritative on the server. `STATE` and `localStorage` are client-side session/cache state and must not replace backend validation. The current frontend also contains a bot/offline fallback; do not treat that fallback as persisted data or extend it when implementing server-backed features.
+Persisted match and challenge state is authoritative on the server. `STATE` and `localStorage` are client-side session/cache state and must not replace backend validation. When no human opponent is available, the frontend uses a local shadow-bot fallback that is not persisted or submitted to the server.
 
 ## API surface
 

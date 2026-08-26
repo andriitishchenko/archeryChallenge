@@ -420,6 +420,10 @@ function numInputTotal(val) {
   refreshArrowCells();
   updateTotalSum();
   _sendLiveArrowPreview(ms, arrowValues, prevIdx, val);
+  if (ms.isBot) {
+    const shadow = botShadowShoot(ms, prevIdx, val, count);
+    _showOpponentArrowIndicator(ms.oppName, shadow);
+  }
   if (arrowValues.slice(0, count).every(v => v !== null)) {
     // Leave a short correction window after the final tap. This matters on
     // touch devices where an accidental tap otherwise submits immediately
@@ -440,6 +444,11 @@ function numInputSet(val) {
   refreshSetArrowCells();
   // Stream arrow to opponent (arrow_index is set-relative: 0, 1, 2)
   _sendLiveArrowPreview(ms, arrowValues, prevIdx, val);
+  if (ms.isBot) {
+    const shadow = botShadowShoot(ms, prevIdx, val, arrowValues.length);
+    if (ms._tiebreak) _showOpponentArrowIndicator(ms.oppName, shadow);
+    else              _showOppSetLive(ms.oppName, shadow);
+  }
   if (arrowValues.length > 0 && arrowValues.every(v => v !== null)) {
     _scheduleScoreSubmission(() => {
       // A match switch cancels the pending submission; this identity guard
@@ -478,6 +487,15 @@ function deleteCell(idx) {
   }
   activeArrowIndex = idx;
   _sendLiveArrowPreview(ms, arrowValues, idx, null);
+  if (ms.isBot) {
+    const shadow = botShadowDelete(ms, idx, arrowValues.length);
+    if (shadow.some(value => value !== null)) {
+      if (ms.scoring === 'sets' && !ms._tiebreak) _showOppSetLive(ms.oppName, shadow);
+      else                      _showOpponentArrowIndicator(ms.oppName, shadow);
+    } else {
+      _oppIndicatorHide();
+    }
+  }
   if (ms.scoring === 'sets') refreshSetArrowCells();
   else {
     refreshArrowCells();

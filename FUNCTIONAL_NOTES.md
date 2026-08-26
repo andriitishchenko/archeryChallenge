@@ -102,7 +102,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Background tiebreak event → retains the tiebreak stage and shows a notification without opening the match screen → the player can resume the match from the resume indicator.
 - Rematch proposal received outside the completion screen → shows a rematch toast and keeps the proposal available in My Challenges → the completion overlay is only used when the match screen is currently displayed.
 - Set score tied at 6:6 → broadcasts `set_tiebreak_started` with both participants' points and current first-to-act value, then clients refresh `/status` → both players enter the same authoritative 6:6 sudden-death state, including after a page reload or while one is viewing another screen.
-- Bot/offline fallback → supports local gameplay when the real opponent path is unavailable → it is not a substitute for persisted server data.
+- Bot/offline fallback → runs a shadow bot that adapts arrow values to the player's historical average and skill profile, shows its arrows as the player shoots, and varies round outcomes → the bot is local-only and not a substitute for persisted server data.
 
 ## Explicit current limits
 

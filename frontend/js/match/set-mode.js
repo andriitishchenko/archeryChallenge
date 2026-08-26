@@ -179,7 +179,8 @@ async function resolveSet() {
   _setStatus(`Set ${setNumber}: waiting for opponent…`);
 
   if (ms.isBot) {
-    const botArrows = genBotArrows(ms.oppSkill || 'Skilled');
+    const botArrows = botShadowFinalize(ms, myTotal, arrowValues.length);
+    _showOppSetLive(ms.oppName, botArrows);
     const botTotal  = botArrows.reduce((a, b) => a + b, 0);
     _resolveSetLocally(myTotal, botTotal, setNumber, ms);
     ms._setSubmitting = false;
@@ -327,6 +328,7 @@ function _startTiebreak() {
   ms._tiebreak      = true;
   ms._pendingTiebreak = false;
   ms._tiebreakSubmitting = false;
+  ms._botShadow = null;
   arrowValues       = [null];
   ms.setArrowValues = [];
   activeArrowIndex  = 0;
@@ -349,9 +351,12 @@ async function resolveTiebreak() {
   _setStatus('Tiebreak: waiting for opponent…');
 
   if (ms.isBot) {
-    const botArrow = Math.floor(Math.random() * 11);
+    const botArrows = botShadowFinalize(ms, myArrow, 1);
+    const botArrow = botArrows[0];
+    _showOpponentArrowIndicator(ms.oppName, botArrows);
     if (myArrow === botArrow) {
       showToast(`Both shot ${myArrow}! Shoot again.`, 'info');
+      ms._botShadow = null;
       arrowValues = [null]; activeArrowIndex = 0;
       refreshSetArrowCells(); _setNumpadDisabled(false); _setStatus('');
       return;

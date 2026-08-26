@@ -29,6 +29,117 @@ function genBotTotal(myScore, skill) {
   return Math.max(0, base);
 }
 
+// ── Shadow bot ───────────────────────────────────────────────────────────────
+
+function _botClamp(value, min = 0, max = 10) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function _botRandomInt(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function _botAveragePerArrow() {
+  const scores = STATE.history
+    .filter(h => h.scoring !== 'sets' && Number.isFinite(Number(h.myScore)) && Number(h.myScore) > 0)
+    .map(h => Number(h.myScore) / (Number(h.arrowCount) || 18));
+  if (!scores.length) return null;
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+function _botShadowMean(ms) {
+  const profile = BOT_SKILL[ms.oppSkill || 'Skilled'] || BOT_SKILL['Skilled'];
+  const playerAverage = _botAveragePerArrow();
+  // The player's average is the main reference, while bot skill still makes
+  // Beginner/Master opponents meaningfully different for new players.
+  const mean = playerAverage === null
+    ? profile.mean
+    : playerAverage * 0.7 + profile.mean * 0.3;
+  return _botClamp(mean);
+}
+
+function _botShadowRound(ms, round, count) {
+  if (
+    !ms._botShadow
+    || ms._botShadow.round !== round
+    || ms._botShadow.count !== count
+  ) {
+    ms._botShadow = {
+      round,
+      count,
+      mean: _botShadowMean(ms),
+      arrows: new Array(count).fill(null),
+    };
+  }
+  return ms._botShadow;
+}
+
+function _botShadowRoundName(ms) {
+  if (ms._tiebreakRequired) return 'total-tiebreak';
+  if (ms.scoring === 'sets') {
+    return ms._tiebreak ? 'set-tiebreak' : `set-${ms.currentSet || 1}`;
+  }
+  return 'total';
+}
+
+function botShadowShoot(ms, index, userValue, count) {
+  if (!ms?.isBot) return [];
+  const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
+  if (state.arrows[index] == null) {
+    const userInfluence = Number.isFinite(userValue)
+      ? (userValue - state.mean) * 0.35 : 0;
+    const jitter = (Math.random() * 2 - 1) * 1.25;
+    state.arrows[index] = Math.round(_botClamp(
+      state.mean + userInfluence + jitter,
+    ));
+  }
+  return [...state.arrows];
+}
+
+function botShadowDelete(ms, index, count) {
+  if (!ms?.isBot) return [];
+  const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
+  state.arrows[index] = null;
+  return [...state.arrows];
+}
+
+function _botMoveToTarget(arrows, target) {
+  let difference = target - arrows.reduce((sum, value) => sum + value, 0);
+  for (let index = arrows.length - 1; index >= 0 && difference !== 0; index--) {
+    const room = difference > 0 ? 10 - arrows[index] : arrows[index];
+    const step = difference > 0
+      ? Math.min(difference, room)
+      : -Math.min(-difference, room);
+    arrows[index] += step;
+    difference -= step;
+  }
+  return arrows;
+}
+
+function botShadowFinalize(ms, userTotal, count) {
+  if (!ms?.isBot) return [];
+  const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
+  const arrows = state.arrows.map(value => value == null
+    ? Math.round(_botClamp(state.mean + (Math.random() * 2 - 1) * 1.25))
+    : value);
+  const maximum = count * 10;
+  const baseline = state.mean * count;
+  const blended = baseline * 0.65 + userTotal * 0.35;
+  let target = Math.round(blended + (Math.random() * 2 - 1) * Math.max(2, count * 0.25));
+
+  // Roughly one quarter of rounds deliberately give the bot a narrow edge;
+  // another quarter gives the player an edge. The remaining rounds follow
+  // the adaptive average and current performance.
+  const outcome = Math.random();
+  const margin = _botRandomInt(1, Math.max(2, Math.round(count * 0.4)));
+  if (outcome < 0.25) target = userTotal + margin;
+  else if (outcome < 0.50) target = userTotal - margin;
+  target = Math.round(_botClamp(target, 0, maximum));
+
+  state.arrows = _botMoveToTarget(arrows, target);
+  return [...state.arrows];
+}
+
 function generateBotOpponent() {
   const names = ['BotArcher_Theta', 'AutoNock_7', 'RoboRelease', 'CyberBow_X'];
   return {
