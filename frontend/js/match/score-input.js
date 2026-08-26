@@ -215,6 +215,10 @@ function renderMatchScene() {
   if (!ms) return;
 
   _setNumpadDisabled(false);
+  // match-status is shared by all match views. Clear the previous match's
+  // waiting/submission message before the current match is rendered; the
+  // authoritative status refresh will set the new message afterwards.
+  _setStatus('');
 
   document.getElementById('ch-my-name').textContent  = ms.myName;
   document.getElementById('ch-opp-name').textContent = ms.oppName;
