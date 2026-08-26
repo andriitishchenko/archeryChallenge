@@ -7,7 +7,19 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Start every new task on a new branch automatically, unless the user explicitly names an existing branch or asks to work directly on the current branch.
 - Use the `codex/<short-task-name>` prefix by default.
 - Check `git status --short` before creating the branch and preserve pre-existing changes; do not silently include unrelated work in the task commit.
-- Keep all changes for one task on its task branch so the work can be reviewed or discarded independently.
+- Keep all changes for one task on its task branch until the task is verified and ready to merge.
+
+## Mandatory task lifecycle
+
+- Create a dedicated feature branch before making task changes.
+- Complete the requested implementation on that feature branch.
+- Run every test explicitly specified by the task; when no tests are specified, run the narrowest relevant checks and record what was verified.
+- Run regression testing for the affected area and confirm that existing functionality still passes.
+- Commit all task changes after the checks pass, keeping unrelated worktree changes out of the commit.
+- Merge the verified feature branch into `main`.
+- Delete the feature branch only after the merge succeeds; do not delete unrelated branches.
+- Never delete the `main` branch.
+- Never delete, rewrite, reset, or force-update history already present on `main`.
 
 ## Requirements are part of the implementation
 
