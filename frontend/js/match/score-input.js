@@ -19,6 +19,15 @@
 
 let _pendingScoreSubmitTimer = null;
 
+EventBus.on(EVENT_TYPES.WS_CONNECTED, () => {
+  const ms = STATE.matchState;
+  if (!ms || ms.complete || ms.isBot || STATE.currentScene !== 'challenge') return;
+  // Individual live-arrow messages are intentionally transient. Replay the
+  // whole local snapshot after reconnect so an arrow skipped while the socket
+  // was opening cannot leave a permanent gap for the opponent.
+  _sendLiveArrowPreview(ms, arrowValues, null, null);
+});
+
 function _cancelPendingScoreSubmission() {
   if (_pendingScoreSubmitTimer) {
     clearTimeout(_pendingScoreSubmitTimer);
@@ -64,23 +73,25 @@ EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
   }
 });
 
-EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value }) => {
+EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value, arrows }) => {
   if (STATE.currentMatchId !== matchId) return;
   const ms = STATE.matchState;
   if (!ms) return;
 
   if (ms.scoring === 'total') {
-    const arrows = ms._oppTotalArrows || [];
-    arrows[arrow_index] = value;
-    ms._oppTotalArrows = arrows;
+    const preview = Array.isArray(arrows) ? [...arrows] : (ms._oppTotalArrows || []);
+    if (!Array.isArray(arrows)) preview[arrow_index] = value;
+    ms._oppTotalArrows = preview;
     saveMatchState();
-    _showOpponentArrowIndicator(ms.oppName, arrows);
+    if (preview.some(v => v != null)) _showOpponentArrowIndicator(ms.oppName, preview);
+    else _oppIndicatorHide();
   } else if (ms.scoring === 'sets') {
     // arrow_index is the position within the current set (0, 1, 2)
-    const setArrows = ms._oppSetArrows || [];
-    setArrows[arrow_index] = value;
+    const setArrows = Array.isArray(arrows) ? [...arrows] : (ms._oppSetArrows || []);
+    if (!Array.isArray(arrows)) setArrows[arrow_index] = value;
     ms._oppSetArrows = setArrows;
-    _showOppSetLive(ms.oppName, setArrows);
+    if (setArrows.some(v => v != null)) _showOppSetLive(ms.oppName, setArrows);
+    else _oppIndicatorHide();
   }
 });
 
@@ -409,7 +420,7 @@ function numInputTotal(val) {
   activeArrowIndex = next === -1 ? count - 1 : next;
   refreshArrowCells();
   updateTotalSum();
-  sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
+  _sendLiveArrowPreview(ms, arrowValues, prevIdx, val);
   if (arrowValues.slice(0, count).every(v => v !== null)) {
     // Leave a short correction window after the final tap. This matters on
     // touch devices where an accidental tap otherwise submits immediately
@@ -429,7 +440,7 @@ function numInputSet(val) {
   activeArrowIndex = next === -1 ? maxIdx : next;
   refreshSetArrowCells();
   // Stream arrow to opponent (arrow_index is set-relative: 0, 1, 2)
-  sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
+  _sendLiveArrowPreview(ms, arrowValues, prevIdx, val);
   if (arrowValues.length > 0 && arrowValues.every(v => v !== null)) {
     _scheduleScoreSubmission(() => {
       // A match switch cancels the pending submission; this identity guard
@@ -467,7 +478,7 @@ function deleteCell(idx) {
     ms.arrowValues = [...arrowValues];
   }
   activeArrowIndex = idx;
-  sendMatchMessage({ type: 'arrow', arrow_index: idx, value: null });
+  _sendLiveArrowPreview(ms, arrowValues, idx, null);
   if (ms.scoring === 'sets') refreshSetArrowCells();
   else {
     refreshArrowCells();
@@ -522,6 +533,16 @@ function _setStatus(msg) {
 
 function _setNumpadDisabled(disabled) {
   document.querySelectorAll('.num-btn').forEach(b => { b.disabled = disabled; });
+}
+
+function _sendLiveArrowPreview(ms, values, changedIndex, changedValue) {
+  if (!ms?.id || ms.id === ms.challengeId) return;
+  sendMatchMessage({
+    type: 'arrow',
+    arrow_index: changedIndex,
+    value: changedValue,
+    arrows: [...values],
+  }, ms.id);
 }
 
 // ── Opponent live indicator ───────────────────────────────────────────────────

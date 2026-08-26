@@ -70,7 +70,8 @@ const WS = (() => {
       // ── Live scoring ────────────────────────────────────────────────────
       case 'opp_arrow':
         EventBus.emit(EVENT_TYPES.WS_OPP_ARROW, {
-          matchId: msg.match_id, arrow_index: msg.arrow_index, value: msg.value });
+          matchId: msg.match_id, arrow_index: msg.arrow_index, value: msg.value,
+          arrows: msg.arrows });
         break;
 
       case 'opp_set_done':
