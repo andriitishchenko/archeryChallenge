@@ -287,6 +287,10 @@ function _launchRematchMatch(data, prev) {
     match_type: data.match_type    || 'live',
     _background: inActiveMatch,
   });
+  // An accepted rematch launched from My Challenges has no navigation event
+  // from that screen. Make the foreground transition explicit; a rematch
+  // accepted while another match is displayed remains in the background.
+  if (!inActiveMatch && STATE.currentScene !== 'challenge') showScene('challenge');
 }
 
 function _startBotRematch(prev) {
@@ -295,6 +299,7 @@ function _startBotRematch(prev) {
     id: `rematch-${Date.now()}`, name: prev.oppName, isBot: true,
     distance: prev.dist, scoring: prev.scoring, arrowCount: prev.arrowCount,
   });
+  if (STATE.currentScene !== 'challenge') showScene('challenge');
 }
 
 // ── Bot fallback ──────────────────────────────────────────────────────────────

@@ -447,15 +447,15 @@ async function acceptRematchFromList(rematchMatchId) {
     if (data?.new_match_id) {
       const prev = STATE.pendingRematches[rematchMatchId] || STATE.lastCompletedMatch || {};
       delete STATE.pendingRematches[rematchMatchId];
-      startMatch({
-        id:         data.new_challenge_id || `rematch-${Date.now()}`,
-        matchId:    data.new_match_id,
-        name:       data.opponent_name || prev.oppName || 'Opponent',
+      _launchRematchMatch({
+        new_match_id: data.new_match_id,
+        new_challenge_id: data.new_challenge_id,
+        opponent_name: data.opponent_name || prev.oppName || 'Opponent',
         scoring:    data.scoring       || prev.scoring || 'total',
         distance:   data.distance      || prev.dist    || '30m',
-        arrowCount: data.arrow_count   || prev.arrowCount || 18,
+        arrow_count: data.arrow_count   || prev.arrowCount || 18,
         match_type: data.match_type    || 'live',
-      });
+      }, prev);
     }
   } catch (e) {
     showToast(e.message || 'Could not accept rematch', 'error');

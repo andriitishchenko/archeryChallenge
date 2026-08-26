@@ -80,7 +80,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Matchmaking request → searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, a bot opponent is generated.
 - Offline notification → queues up to 50 messages per user → queued messages flush when that user reconnects.
 - Rematch proposal → creates a private waiting rematch match and notifies the opponent with the original match ID → duplicate proposals are rejected and the client can associate the request with the correct completed match.
-- Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event and the declined match is removed.
+- Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event, the accepted foreground rematch opens on the challenge screen, and the declined match is removed.
 
 ### History, ranking, and client state
 
