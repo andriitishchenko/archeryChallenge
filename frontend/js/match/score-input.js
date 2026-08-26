@@ -66,11 +66,10 @@ EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
   // The opponent-results element is shared by all match views. Do not carry
   // the previous match's live arrow summary into the match being resumed.
   _oppIndicatorHide();
+  matchState._oppTotalArrows = [];
+  matchState._oppSetArrows = [];
   arrowValues = [...(matchState.arrowValues || [])];
   renderMatchScene();
-  if (matchState.scoring === 'total' && matchState._oppTotalArrows?.length) {
-    _showOpponentArrowIndicator(matchState.oppName, matchState._oppTotalArrows);
-  }
 });
 
 EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value, arrows }) => {
