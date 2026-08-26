@@ -97,6 +97,17 @@ EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value, arrows }) 
 EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, result, tiebreakArrows, matchState }) => {
   if (!wasDisplayed) return;
 
+  // Bot finalisation can adjust the live preview to the final target total.
+  // Render that exact array again so the displayed arrows and result cannot
+  // disagree after the match completes.
+  if (matchState?.isBot && Array.isArray(matchState._botFinalArrows)) {
+    if (matchState.scoring === 'sets' && !matchState._tiebreak) {
+      _showOppSetLive(matchState.oppName, matchState._botFinalArrows, matchState);
+    } else {
+      _showOpponentArrowIndicator(matchState.oppName, matchState._botFinalArrows, matchState);
+    }
+  }
+
   let icon, title;
   if (result === 'win')       { icon = '🏆'; title = 'You Win!'; }
   else if (result === 'loss') { icon = '😤'; title = 'Better luck next time'; }
@@ -581,8 +592,8 @@ function _oppIndicatorHide() {
 }
 
 // Total mode: "Brave: [10, 10, 10]: 30" — static until the match changes.
-function _showOpponentArrowIndicator(oppName, arrows) {
-  const ms = STATE.matchState;
+function _showOpponentArrowIndicator(oppName, arrows, matchState = STATE.matchState) {
+  const ms = matchState;
   const count = ms?._tiebreakRequired ? 1 : (ms?.arrowCount || arrows.length);
   const slots = Array.from({ length: count }, (_, i) =>
     arrows[i] != null ? arrows[i] : '–'
@@ -605,7 +616,7 @@ function _showOppSetArrows(oppTotal, arrows) {
  * setArrows: sparse array indexed 0-2, missing values shown as –
  * Static — stays until _nextSet() clears it.
  */
-function _showOppSetLive(oppName, setArrows) {
+function _showOppSetLive(oppName, setArrows, matchState = STATE.matchState) {
   const slots  = [0, 1, 2].map(i => setArrows[i] != null ? setArrows[i] : '–');
   const filled = setArrows.filter(v => v != null);
   const total  = filled.reduce((a, b) => a + b, 0);

@@ -158,6 +158,9 @@ function botShadowFinalize(ms, userTotal, count) {
   target = Math.round(_botClamp(target, 0, maximum));
 
   state.arrows = _botMoveToTarget(arrows, target);
+  // Keep the exact array used for the result so the completion overlay can
+  // replace any stale live preview with the same values that were scored.
+  ms._botFinalArrows = [...state.arrows];
   if (Number.isFinite(playerMean)) {
     if (!Array.isArray(ms._botPlayerRoundAverages)) ms._botPlayerRoundAverages = [];
     ms._botPlayerRoundAverages.push(playerMean);
