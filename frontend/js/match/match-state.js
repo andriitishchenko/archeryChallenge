@@ -346,8 +346,13 @@ async function _fetchAndResolveMatch(matchId) {
   if (!ms || ms.complete || ms.isBot) return;
 
   try {
+    const statusRequestSeq = (ms._statusRequestSeq || 0) + 1;
+    ms._statusRequestSeq = statusRequestSeq;
     const status = await api('GET', `/api/matches/${ms.id}/status`);
     if (!status) return;
+    // A status request started before a scoring event may finish later than a
+    // newer request and otherwise overwrite the fresh 6:6 state.
+    if (ms._statusRequestSeq !== statusRequestSeq) return;
 
     const isTiebreak = status.scoring === 'tiebreak';
     const isSets     = status.scoring === 'sets' || ms.scoring === 'sets';

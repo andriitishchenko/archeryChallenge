@@ -106,6 +106,10 @@ EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId, scores, next_first 
   } else {
     showToast(`${escHtml(ms.oppName || 'Opponent')} — sudden death started.`, 'info');
   }
+  // The event is a fast notification, while /status is authoritative. A
+  // client can receive this event after a stale local set score was rendered;
+  // refresh immediately so both scoreboards show the same 6:6 state.
+  _fetchAndResolveMatch(matchId);
 });
 
 // Opponent finished their tiebreak arrow
@@ -262,7 +266,12 @@ function _applySetResult(result, targetMatchId) {
       const nextMsg  = youFirst ? 'You shoot first next set.' : `${oppName} shoots first next set.`;
       _setStatus(`Set ${setNumber}: ${myName} ${result.my_set_total} – ${oppName} ${result.opp_set_total} — ${label}  [${result.my_set_points}:${result.opp_set_points}]  ${nextMsg}`);
     }
-    if      (result.tiebreak_required) _startTiebreak();
+    if      (result.tiebreak_required) {
+      _startTiebreak();
+      // Confirm the transition from the server so a stale local 5:5 score
+      // cannot remain beside the sudden-death UI.
+      _fetchAndResolveMatch(mid);
+    }
     else if (result.match_complete)    completeMatch(ms.setMyScore, ms.setOppScore, mid, result.match_result ?? null);
     else                               _nextSet(setNumber);
   } else if (result.match_complete) {

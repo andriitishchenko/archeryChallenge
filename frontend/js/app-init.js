@@ -127,6 +127,8 @@ async function _refreshMatchScene() {
     return;
   }
   try {
+    const statusRequestSeq = (ms._statusRequestSeq || 0) + 1;
+    ms._statusRequestSeq = statusRequestSeq;
     const status = await api('GET', `/api/matches/${ms.id}/status`);
     if (!status) {
       // Keep the locally restored stage visible if the status request is
@@ -134,6 +136,9 @@ async function _refreshMatchScene() {
       renderMatchScene();
       return;
     }
+    // Ignore an older restore response when a scoring event already started
+    // a newer authoritative status refresh for this match.
+    if (ms._statusRequestSeq !== statusRequestSeq) return;
 
     if (status.status === 'waiting') {
       _setNumpadDisabled(true);
