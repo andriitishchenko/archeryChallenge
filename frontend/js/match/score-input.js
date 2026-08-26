@@ -27,6 +27,9 @@ EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }
     }
     return;
   }
+  // A newly displayed match has its own opponent stream. Clear the previous
+  // match's live-arrow summary when switching from a completed/parallel match.
+  _oppIndicatorHide();
   renderMatchScene();  // renderMatchScene already restores arrowValues from matchState
   _resetRematchUI();
 });

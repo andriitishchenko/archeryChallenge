@@ -39,7 +39,14 @@ function startMatch(challenge, isCreator = false) {
 
   STATE.activeMatches[matchId] = newMs;
   if (!background) STATE.completionMatchId = null;
-  if (!background) STATE.currentMatchId = matchId;
+  if (!background) {
+    STATE.currentMatchId = matchId;
+    // A new match must never inherit the input buffer of the match that was
+    // displayed immediately before it (especially when switching from a
+    // completed match or another parallel match).
+    arrowValues = [];
+    activeArrowIndex = 0;
+  }
 
   saveMatchState();
   EventBus.emit(EVENT_TYPES.APP_MATCH_STARTED, { matchId, matchState: newMs, background });

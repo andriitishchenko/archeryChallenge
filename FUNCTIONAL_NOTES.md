@@ -85,6 +85,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Completed human matches → appear in history and contribute to ranking → tiebreak child matches are not counted as separate normal matches.
 - Achievement request → calculates the maximum historical consecutive-win streak from completed parent matches and evaluates 5, 10, and 25-win badges independently → once a streak has occurred, a later loss or draw does not un-highlight the smaller completed streak badge.
 - Active match state → is kept in `STATE.activeMatches[matchId]` and cached in local storage for session recovery → server status wins over stale browser cache.
+- Starting or switching to a newly created match → resets the local arrow input and opponent live-result indicator → a parallel or rematch session cannot display scores carried over from the previously displayed match.
 - Background match event → shows a notification and updates the resume indicator without switching away from the current screen → active match remains selectable.
 - Background match completion → resolves the authoritative result, records it in history, and shows a win/loss/draw toast without switching screens → the resume indicator and My Challenges list are refreshed.
 - Navigation to My Challenges while a match is active → refreshes server match metadata while retaining transient scoring/tiebreak flags → later WebSocket events continue to resolve the background match.
