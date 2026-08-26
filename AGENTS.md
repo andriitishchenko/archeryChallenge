@@ -31,6 +31,8 @@ These rules apply to every coding, review, and maintenance agent working in this
 ## Commit policy
 
 - After completing a task and its checks, commit the task changes automatically unless the user explicitly asks to leave them uncommitted.
+- When the definition of done is satisfied and the relevant checks pass, the agent must run `git add` for the task files and create the commit without asking for an additional confirmation.
+- Pre-existing or unrelated worktree changes must remain untouched and outside the automatic commit; report them separately if present.
 - Keep unrelated pre-existing changes out of the automatic commit.
 
 For the repository architecture, commands, and detailed conventions, read `CLAUDE.md` and `README.md`.
