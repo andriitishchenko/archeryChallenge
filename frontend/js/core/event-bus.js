@@ -65,6 +65,7 @@ const EVENT_TYPES = Object.freeze({
   WS_REMATCH_PROPOSED:      'ws:rematch_proposed',
   WS_REMATCH_ACCEPTED:      'ws:rematch_accepted',
   WS_REMATCH_DECLINED:      'ws:rematch_declined',
+  WS_REMATCH_CANCELLED:     'ws:rematch_cancelled',
 
   // Matchmaking
   WS_MM_STATUS:             'ws:mm_status',

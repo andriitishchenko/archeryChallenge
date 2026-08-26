@@ -177,6 +177,11 @@ const WS = (() => {
           matchId: msg.match_id, declined_by: msg.declined_by });
         break;
 
+      case 'rematch_cancelled':
+        EventBus.emit(EVENT_TYPES.WS_REMATCH_CANCELLED, {
+          matchId: msg.match_id, cancelled_by: msg.cancelled_by });
+        break;
+
       // ── Matchmaking ─────────────────────────────────────────────────────
       case 'mm_status':
         EventBus.emit(EVENT_TYPES.WS_MM_STATUS, { message: msg.message });

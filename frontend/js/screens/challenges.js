@@ -399,8 +399,9 @@ function _renderMyChCard(ch) {
     const matchId    = escHtml(ch.match_id);
     const isProposer = ch.is_creator;
     const actionRow  = isProposer
-      ? `<div class="active-match-row waiting-row">
+      ? `<div class="rematch-pending-row">
            <span class="active-match-label">⏳ Waiting for ${oppName} to accept…</span>
+           <button class="btn-sm btn-danger" onclick="cancelRematchFromList('${matchId}')">Cancel</button>
          </div>`
       : `<div class="rematch-pending-row">
            <span class="active-match-label">🏹 ${oppName} wants a rematch</span>
@@ -482,6 +483,22 @@ async function declineRematchFromList(rematchMatchId) {
     refreshMyChallenges();
   } catch (e) {
     showToast(e.message || 'Could not decline rematch', 'error');
+  }
+}
+
+async function cancelRematchFromList(rematchMatchId) {
+  try {
+    await api('POST', `/api/matches/${rematchMatchId}/rematch/cancel`);
+    delete STATE.pendingRematches[rematchMatchId];
+    if (STATE.lastCompletedMatch?._rematchMatchId === rematchMatchId) {
+      delete STATE.lastCompletedMatch._rematchMatchId;
+    }
+    EventBus.emit(EVENT_TYPES.APP_REMATCH_PENDING_CANCEL, {});
+    showToast('Rematch cancelled', 'info');
+    refreshMyChallenges();
+  } catch (e) {
+    showToast(e.message || 'Could not cancel rematch', 'error');
+    refreshMyChallenges();
   }
 }
 

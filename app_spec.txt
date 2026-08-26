@@ -133,6 +133,7 @@
       - POST /api/matches/{id}/score
       - POST /api/matches/{id}/forfeit
       - POST /api/matches/{id}/rematch
+      - POST /api/matches/{id}/rematch/cancel
     </Matches>
     <Stats>
       - GET /api/history

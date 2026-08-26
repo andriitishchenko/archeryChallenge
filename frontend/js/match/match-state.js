@@ -674,6 +674,21 @@ EventBus.on(EVENT_TYPES.WS_REMATCH_DECLINED, ({ matchId, declined_by }) => {
   showToast(`${escHtml(declined_by || prev.oppName || 'Opponent')} declined the rematch`, 'info');
 });
 
+EventBus.on(EVENT_TYPES.WS_REMATCH_CANCELLED, ({ matchId, cancelled_by }) => {
+  const prev = STATE.pendingRematches[matchId] || STATE.lastCompletedMatch || {};
+  delete STATE.pendingRematches[matchId];
+  if (STATE.lastCompletedMatch?._rematchMatchId === matchId) {
+    delete STATE.lastCompletedMatch._rematchMatchId;
+  }
+  const requestEl = document.getElementById('rematch-request');
+  if (requestEl?.dataset.matchId === matchId) {
+    requestEl.classList.add('hidden');
+    document.getElementById('complete-actions')?.classList.remove('hidden');
+  }
+  showToast(`${escHtml(cancelled_by || prev.oppName || 'Opponent')} cancelled the rematch`, 'info');
+  if (typeof refreshMyChallenges === 'function') refreshMyChallenges();
+});
+
 EventBus.on(EVENT_TYPES.WS_ERROR, ({ matchId }) => {
   if (matchId !== 'matchmaking' && STATE.currentMatchId === matchId) {
     showToast('Live connection error — continuing offline', 'error');

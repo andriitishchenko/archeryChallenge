@@ -3,6 +3,7 @@ Rematch endpoints:
   POST /api/matches/{id}/rematch          — propose a rematch
   POST /api/matches/{id}/rematch/accept   — accept (tolerates original OR new match id)
   POST /api/matches/{id}/rematch/decline  — decline
+  POST /api/matches/{id}/rematch/cancel   — proposer cancels a waiting rematch
 """
 import asyncio
 import uuid
@@ -75,6 +76,30 @@ def _resolve_rematch_match(match_id: str, user_id: str, db: Session) -> Match:
             raise HTTPException(status_code=400, detail="Not a pending rematch")
         return waiting
     return match
+
+
+def _reset_original_rematch(rematch: Match, proposer_id: str, db: Session) -> None:
+    """Clear the original match's proposal flag after a waiting rematch ends."""
+    participant_ids = {p.user_id for p in rematch.participants}
+    candidates = (
+        db.query(Match)
+        .options(joinedload(Match.participants))
+        .filter(
+            Match.status == "complete",
+            Match.rematch_status == "proposed",
+            Match.rematch_proposed_by == proposer_id,
+        )
+        .order_by(Match.completed_at.desc())
+        .all()
+    )
+    original = next(
+        (candidate for candidate in candidates
+         if {p.user_id for p in candidate.participants} == participant_ids),
+        None,
+    )
+    if original:
+        original.rematch_status = None
+        original.rematch_proposed_by = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -200,6 +225,7 @@ async def decline_rematch(
     db:           Session = Depends(get_db),
 ):
     match = _resolve_rematch_match(match_id, current_user.id, db)
+    match_id = match.id
     ch    = match.challenge
 
     if match.status != "waiting":
@@ -212,6 +238,7 @@ async def decline_rematch(
     me_profile    = db.query(Profile).filter(Profile.user_id == current_user.id).first()
     decliner_name = me_profile.name if me_profile else "Opponent"
 
+    _reset_original_rematch(match, proposer_id, db)
     db.delete(match)
     db.flush()
     db.delete(ch)
@@ -222,3 +249,42 @@ async def decline_rematch(
             "type": "rematch_declined", "match_id": match_id, "declined_by": decliner_name,
         }))
     return RematchOut(status="declined")
+
+
+@router.post("/{match_id}/rematch/cancel", response_model=RematchOut)
+async def cancel_rematch(
+    match_id:     str,
+    current_user: User    = Depends(get_current_user),
+    db:           Session = Depends(get_db),
+):
+    """Cancel a waiting rematch created by the current user."""
+    match = _resolve_rematch_match(match_id, current_user.id, db)
+    match_id = match.id
+    ch = match.challenge
+
+    if match.status != "waiting":
+        raise HTTPException(status_code=400, detail="Rematch is not pending")
+
+    me = get_participant(match, current_user.id)
+    opp = get_opponent(match, current_user.id)
+    if not me or not me.is_creator:
+        raise HTTPException(status_code=403, detail="Only the proposer can cancel this rematch")
+
+    opponent_id = opp.user_id if opp else None
+    proposer_profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+    proposer_name = proposer_profile.name if proposer_profile else "Opponent"
+
+    _reset_original_rematch(match, current_user.id, db)
+    db.delete(match)
+    db.flush()
+    if ch:
+        db.delete(ch)
+    db.commit()
+
+    if opponent_id:
+        asyncio.create_task(manager.notify_user(opponent_id, {
+            "type": "rematch_cancelled",
+            "match_id": match_id,
+            "cancelled_by": proposer_name,
+        }))
+    return RematchOut(status="cancelled")

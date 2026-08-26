@@ -82,7 +82,8 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Matchmaking request → replaces any previous request for the same user and searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, one bot fallback event is emitted with `is_bot=true` and the client starts a non-persisted bot match.
 - Offline notification → queues up to 50 messages per user → queued messages flush when that user reconnects.
 - Rematch proposal → creates a private waiting rematch match and notifies the opponent with the original match ID → duplicate proposals are rejected and the client can associate the request with the correct completed match.
-- Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event, the accepted foreground rematch opens on the challenge screen, and the declined match is removed.
+- Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event, the accepted foreground rematch opens on the challenge screen, the declined match is removed, and the original match can be rematched again.
+- Rematch cancellation by proposer → deletes the waiting rematch and its private challenge, resets the original match proposal flag, and notifies the opponent with `rematch_cancelled` → both My Challenges cards disappear and the opponent cannot accept the cancelled request.
 
 ### History, ranking, and client state
 

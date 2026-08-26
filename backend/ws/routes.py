@@ -52,6 +52,7 @@ async def ws_user(
       new_challenge, challenge_removed, opponent_joined, match_complete,
       tiebreak_started, set_tiebreak_started, match_ready,
       rematch_proposed, rematch_accepted, rematch_declined,
+      rematch_cancelled,
       opp_arrow, opp_set_done, opp_score_done, opp_tiebreak_done,
       set_resolved, opponent_disconnected,
       mm_status, mm_matched, mm_cancelled, pong
