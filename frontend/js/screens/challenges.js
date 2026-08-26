@@ -291,7 +291,10 @@ function buildChallengeLink(id) {
 
 // ── My Challenges ─────────────────────────────────────────────────────────────
 
+let _myChallengesRefreshSeq = 0;
+
 async function refreshMyChallenges() {
+  const refreshSeq = ++_myChallengesRefreshSeq;
   const container = document.getElementById('my-challenges-list');
   container.innerHTML = `<div class="empty-state"><span class="spinner"></span></div>`;
 
@@ -302,6 +305,10 @@ async function refreshMyChallenges() {
   } catch (e) {
     console.warn('Could not load my challenges:', e.message);
   }
+
+  // A completion event can trigger a newer refresh while an older request is
+  // still in flight. Never let the older response restore a stale card/state.
+  if (refreshSeq !== _myChallengesRefreshSeq) return;
 
   STATE.myChallenges = challenges;
   localStorage.setItem('arrowmatch_my_challenges', JSON.stringify(challenges));
@@ -343,7 +350,12 @@ async function refreshMyChallenges() {
 
   const serverMatchIds = new Set(challenges.filter(c => c.match_id).map(c => c.match_id));
   for (const [mid, ms] of Object.entries(STATE.activeMatches)) {
-    if (!ms.isBot && !serverMatchIds.has(mid)) ms.complete = true;
+    if (!ms.isBot && !ms.complete && ms.id !== ms.challengeId && !serverMatchIds.has(mid)) {
+      // The dashboard omits completed matches. Reconcile through the
+      // authoritative status endpoint so a missed websocket completion still
+      // records history and removes the local Resume entry.
+      _fetchAndResolveMatch(mid);
+    }
   }
   saveMatchState();
   EventBus.emit(EVENT_TYPES.APP_ACTIVE_MATCHES_CHANGED, {

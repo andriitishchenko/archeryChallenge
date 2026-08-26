@@ -84,6 +84,8 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Background match event → shows a notification and updates the resume indicator without switching away from the current screen → active match remains selectable.
 - Background match completion → resolves the authoritative result, records it in history, and shows a win/loss/draw toast without switching screens → the resume indicator and My Challenges list are refreshed.
 - Navigation to My Challenges while a match is active → refreshes server match metadata while retaining transient scoring/tiebreak flags → later WebSocket events continue to resolve the background match.
+- Resume for a match completed while its dashboard card was visible → removes the stale local match and refreshes My Challenges when the server no longer returns it → the user sees one informational toast and cannot keep reopening the finished session.
+- Overlapping My Challenges refreshes → only the newest server response updates state and the rendered list, and omitted local matches are reconciled through `/status` → an older in-flight response cannot restore a completed match card and a missed completion event still records/removes the match.
 - Background tiebreak event → retains the tiebreak stage and shows a notification without opening the match screen → the player can resume the match from the resume indicator.
 - Rematch proposal received outside the completion screen → shows a rematch toast and keeps the proposal available in My Challenges → the completion overlay is only used when the match screen is currently displayed.
 - Set score tied at 6:6 → broadcasts `set_tiebreak_started` to both participants → both players can enter the sudden-death arrow even if one is viewing another screen.

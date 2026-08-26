@@ -66,7 +66,12 @@ function switchToMatch(matchId) {
     api('GET', '/api/my-challenges').then(data => {
       const challenges = Array.isArray(data) ? data : [];
       const ch = challenges.find(c => c.match_id === matchId);
-      if (!ch) { showToast('Match no longer active', 'error'); return; }
+      if (!ch) {
+        _removeActiveMatch(matchId);
+        if (STATE.currentScene === 'my-challenges') refreshMyChallenges();
+        showToast('Match no longer active', 'error');
+        return;
+      }
       STATE.activeMatches[matchId] = {
         id: matchId, challengeId: ch.id,
         myName: STATE.profile?.name || 'You', oppName: ch.opponent_name || 'Opponent',
@@ -83,7 +88,12 @@ function switchToMatch(matchId) {
     return;
   }
 
-  if (ms.complete) { showToast('That match has already finished', 'info'); return; }
+  if (ms.complete) {
+    _removeActiveMatch(matchId);
+    if (STATE.currentScene === 'my-challenges') refreshMyChallenges();
+    showToast('Match no longer active', 'info');
+    return;
+  }
 
   // Persist arrow values for the match we're leaving
   const cur = STATE.activeMatches[STATE.currentMatchId];

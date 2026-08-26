@@ -141,6 +141,13 @@ async function _refreshMatchScene() {
       return;
     }
 
+    if (status.status === 'complete' && status.result) {
+      // The dashboard card may have been rendered just before the opponent
+      // finished. Resolve and remove the stale match before rendering Resume.
+      _fetchAndResolveMatch(ms.id);
+      return;
+    }
+
     const isTiebreak = status.scoring === 'tiebreak';
     const isSets     = status.scoring === 'sets';
 
