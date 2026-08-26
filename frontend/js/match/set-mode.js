@@ -6,24 +6,24 @@
 //             match/match-state.js, match/score-input.js, match/bot.js
 // =============================================
 
-// Opponent finished their set — resolve if we already submitted
+// Opponent finished their set — update the waiting state without resubmitting.
 EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId, set_number, set_total }) => {
   const ms       = STATE.activeMatches[matchId];
   const isActive = STATE.currentMatchId === matchId;
   if (!ms) return;
 
   if (ms._pendingSetNumber !== undefined) {
-    if (ms.complete) { delete ms._pendingSetNumber; return; }
-    const pendingSet = ms._pendingSetNumber;
-    delete ms._pendingSetNumber;
-    api('POST', `/api/matches/${matchId}/set`, {
-      set_number: pendingSet, arrows: ms.setArrowValues || [],
-    }).then(result => {
-      if (result) _applySetResult(result, matchId);
-    }).catch(() => {});
+    // The opponent's submission resolves the set on the server. Do not resend
+    // our already-cleared input; that used to POST arrows: [] and produce 422.
+    if (ms.complete) delete ms._pendingSetNumber;
+    if (isActive) {
+      _setNumpadDisabled(true);
+      _setStatus(`Set ${set_number || ms._pendingSetNumber}: both submissions received — calculating result…`);
+    }
   } else if (isActive) {
     const totalStr = set_total !== undefined ? ` (${set_total} pts)` : '';
     _setStatus(`${escHtml(ms.oppName)} submitted set ${set_number || ''}${totalStr} — waiting for your arrows…`);
+    _setNumpadDisabled(false);
   } else {
     showToast(`${escHtml(ms.oppName || 'Opponent')} submitted set ${set_number || ''}.`, 'info');
     _fetchAndResolveMatch(matchId);
@@ -67,11 +67,20 @@ EventBus.on(EVENT_TYPES.WS_SET_RESOLVED, ({ matchId, set_number, scores, winner_
 
 // Set-system sudden death starts on the server when the sixth set is tied.
 // The event is also needed by a player who has already left the match screen.
-EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId }) => {
+EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId, scores, next_first }) => {
   const ms = STATE.activeMatches[matchId];
-  if (!ms || ms._tiebreak) return;
+  if (!ms) return;
 
   ms._tiebreak = true;
+  ms._pendingTiebreak = false;
+  if (scores) {
+    const myData = scores[STATE.userId];
+    const oppId = Object.keys(scores).find(id => id !== STATE.userId);
+    const oppData = oppId ? scores[oppId] : null;
+    if (myData) ms.setMyScore = myData.pts;
+    if (oppData) ms.setOppScore = oppData.pts;
+  }
+  if (next_first) ms.firstToAct = next_first;
   saveMatchState();
   if (STATE.currentMatchId === matchId) {
     _startTiebreak();
@@ -84,29 +93,23 @@ EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId }) => {
 EventBus.on(EVENT_TYPES.WS_OPP_TIEBREAK_DONE, ({ matchId }) => {
   const ms       = STATE.activeMatches[matchId];
   const isActive = STATE.currentMatchId === matchId;
-  if (!ms || !ms._pendingTiebreak) return;
+  if (!ms) return;
 
-  delete ms._pendingTiebreak;
-  const prevId  = STATE.currentMatchId;
-  STATE.currentMatchId = matchId;
-  const myArrow = isActive ? arrowValues[0] : null;
-
-  if (myArrow !== null) {
-    api('POST', `/api/matches/${matchId}/set`, { set_number: 0, arrows: [myArrow] })
-      .then(result => {
-        STATE.currentMatchId = prevId;
-        if (!result) return;
-        if (result.tiebreak_required) {
-          showToast('Still tied! Shoot one more.', 'info');
-          arrowValues = [null]; activeArrowIndex = 0;
-          refreshSetArrowCells(); _setNumpadDisabled(false); _setStatus('');
-        } else if (result.match_complete) {
-          _setStatus('');
-          completeMatch(result.my_set_points, result.opp_set_points, matchId, result.match_result ?? null);
-        }
-      });
+  // The opponent's arrow unlocks this round for us. Never submit a second
+  // copy of our arrow from this notification.
+  if (ms._pendingTiebreak) {
+    ms._pendingTiebreak = true;
+    if (isActive) {
+      _setNumpadDisabled(true);
+      _setStatus(`Tiebreak: both arrows received — calculating result…`);
+    }
+    return;
+  }
+  if (isActive) {
+    _setNumpadDisabled(false);
+    _setStatus(`${escHtml(ms.oppName)} already shot — shoot your arrow!`);
   } else {
-    STATE.currentMatchId = prevId;
+    showToast(`${escHtml(ms.oppName || 'Opponent')} shot a sudden-death arrow.`, 'info');
   }
 });
 
@@ -154,6 +157,11 @@ async function resolveSet() {
       ms._setSubmitting = false;
       _setNumpadDisabled(true);
       _setStatus('This match is no longer available.');
+      return;
+    }
+    if (e?.status === 422) {
+      ms._setSubmitting = false;
+      await _fetchAndResolveMatch(ms.id);
       return;
     }
     showToast('Network error — retrying…', 'error');
@@ -211,6 +219,7 @@ function _applySetResult(result, targetMatchId) {
   }
 
   const setNumber    = result.set_number;
+  delete ms._pendingSetNumber;
   ms.setMyScore      = result.my_set_points;
   ms.setOppScore     = result.opp_set_points;
   ms.currentSet      = setNumber + 1;
@@ -270,6 +279,8 @@ function _nextSet(prevSetNumber) {
 function _startTiebreak() {
   const ms = STATE.matchState;
   ms._tiebreak      = true;
+  ms._pendingTiebreak = false;
+  ms._tiebreakSubmitting = false;
   arrowValues       = [null];
   ms.setArrowValues = [];
   activeArrowIndex  = 0;
@@ -285,8 +296,9 @@ function _startTiebreak() {
 async function resolveTiebreak() {
   const ms      = STATE.matchState;
   const myArrow = arrowValues[0];
-  if (myArrow === null) return;
+  if (!ms || myArrow === null || ms._tiebreakSubmitting) return;
 
+  ms._tiebreakSubmitting = true;
   _setNumpadDisabled(true);
   _setStatus('Tiebreak: waiting for opponent…');
 
@@ -314,15 +326,19 @@ async function resolveTiebreak() {
     if (!result.both_submitted) {
       _setStatus(`Tiebreak: waiting for ${ms.oppName}…`);
       ms._pendingTiebreak = true;
+      ms._tiebreakSubmitting = false;
       return;
     }
     if (result.tiebreak_required) {
       showToast('Both shot equal! Shoot one more arrow.', 'info');
+      ms._pendingTiebreak = false;
+      ms._tiebreakSubmitting = false;
       arrowValues = [null]; activeArrowIndex = 0;
       refreshSetArrowCells(); _setNumpadDisabled(false); _setStatus('');
       return;
     }
     _setStatus('');
+    ms._tiebreakSubmitting = false;
     completeMatch(result.my_set_points, result.opp_set_points, ms.id, result.match_result ?? null);
   } catch (e) {
     if (e?.status === 404) {
@@ -330,7 +346,13 @@ async function resolveTiebreak() {
       _setStatus('This match is no longer available.');
       return;
     }
+    if (e?.status === 422) {
+      ms._tiebreakSubmitting = false;
+      await _fetchAndResolveMatch(ms.id);
+      return;
+    }
     showToast('Network error on tiebreak', 'error');
+    ms._tiebreakSubmitting = false;
     _setNumpadDisabled(false);
     _setStatus('');
   }

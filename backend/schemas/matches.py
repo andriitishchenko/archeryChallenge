@@ -80,6 +80,8 @@ class MatchStatusOut(BaseModel):
     opp_current_set_arrows:   Optional[List[Optional[int]]] = None
     # Active child match used for total-score sudden death, if any.
     tiebreak_match_id:         Optional[str] = None
+    # Set-system sudden death is stored on the parent match (set_number=0).
+    set_tiebreak:              bool = False
 
 
 class MatchParticipantOut(BaseModel):

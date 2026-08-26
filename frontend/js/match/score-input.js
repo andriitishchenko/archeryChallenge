@@ -185,6 +185,7 @@ function renderMatchScene() {
   document.getElementById('ch-dist').textContent     = ms.dist;
 
   const isTiebreak = ms._tiebreakRequired === true;
+  const isSetTiebreak = ms.scoring === 'sets' && ms._tiebreak === true;
   const isTotal    = ms.scoring === 'total' || isTiebreak;
   const arrowCount = isTiebreak ? 1 : ms.arrowCount;
 
@@ -201,8 +202,10 @@ function renderMatchScene() {
     updateTotalSum();
     if (isTiebreak) _setStatus('Sudden death — shoot one arrow! Highest wins.');
   } else {
-    buildSetArrowRow();
-    arrowValues = ms.setArrowValues.length ? [...ms.setArrowValues] : new Array(3).fill(null);
+    buildSetArrowRow(isSetTiebreak ? 1 : 3);
+    arrowValues = isSetTiebreak
+      ? [null]
+      : (ms.setArrowValues.length ? [...ms.setArrowValues] : new Array(3).fill(null));
     activeArrowIndex = arrowValues.findIndex(v => v === null);
     if (activeArrowIndex === -1) activeArrowIndex = 2;
     refreshSetArrowCells();
@@ -211,7 +214,11 @@ function renderMatchScene() {
     refreshSetScore();
     // Restore set progress label from state (currentSet is synced from server on page load)
     const progressEl = document.getElementById('set-progress');
-    if (progressEl) progressEl.textContent = `Set ${ms.currentSet ?? 1}`;
+    if (progressEl) {
+      progressEl.textContent = isSetTiebreak
+        ? 'Tiebreak — sudden death'
+        : `Set ${ms.currentSet ?? 1}`;
+    }
   }
 
   document.getElementById('match-complete').classList.add('hidden');

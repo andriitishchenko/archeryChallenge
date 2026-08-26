@@ -150,9 +150,11 @@ async function _refreshMatchScene() {
 
     const isTiebreak = status.scoring === 'tiebreak';
     const isSets     = status.scoring === 'sets';
+    const isSetTiebreak = isSets && status.set_tiebreak === true;
 
     // ── Restore authoritative server state into matchState ────────────────
     ms._tiebreakRequired = isTiebreak;
+    ms._tiebreak         = isSetTiebreak;
     ms._tiebreakMatchId  = status.tiebreak_match_id || ms._tiebreakMatchId || null;
     ms.firstToAct        = status.first_to_act || ms.firstToAct;
 
@@ -162,6 +164,13 @@ async function _refreshMatchScene() {
       ms.arrowValues   = [];
       arrowValues      = [null];
       activeArrowIndex = 0;
+    } else if (isSetTiebreak) {
+      ms.setMyScore  = status.my_set_points  ?? ms.setMyScore  ?? 0;
+      ms.setOppScore = status.opp_set_points ?? ms.setOppScore ?? 0;
+      ms.currentSet  = status.current_set    ?? ms.currentSet  ?? 1;
+      ms.setArrowValues = [];
+      arrowValues       = [null];
+      activeArrowIndex  = 0;
     } else if (isSets) {
       // Restore set scoreboard and current set from server
       ms.setMyScore  = status.my_set_points  ?? ms.setMyScore  ?? 0;
@@ -190,6 +199,20 @@ async function _refreshMatchScene() {
       } else if (status.opp_submitted) {
         _setNumpadDisabled(false);
         _setStatus(`${escHtml(ms.oppName)} already shot — shoot your arrow!`);
+      }
+    } else if (isSetTiebreak) {
+      ms._pendingTiebreak = status.my_submitted || false;
+      if (status.my_submitted) {
+        _setNumpadDisabled(true);
+        _setStatus(status.opp_submitted
+          ? 'Both submitted — calculating result…'
+          : `Score submitted — waiting for ${escHtml(ms.oppName)}…`);
+      } else if (status.opp_submitted) {
+        _setNumpadDisabled(false);
+        _setStatus(`${escHtml(ms.oppName)} already shot — shoot your arrow!`);
+      } else {
+        _setNumpadDisabled(false);
+        _setStatus(status.judge_status || 'Tiebreak — shoot one arrow each.');
       }
     } else if (isSets) {
       // Restore opponent's already-submitted arrows for current set

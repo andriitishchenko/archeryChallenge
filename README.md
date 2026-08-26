@@ -123,7 +123,7 @@ The complete request/response contract is defined by the Pydantic schemas in `ba
 Connect to `/ws/user?token=<access_token>`. The connection is persistent for the session.
 
 - Client messages: `ping`, `arrow`, `mm_find`, `mm_cancel`.
-- Server events: match lifecycle and scoring events (`opponent_joined`, `opp_arrow`, `set_resolved`, `set_tiebreak_started`, `match_complete`, `tiebreak_started`), rematch events, challenge feed events, and matchmaking events.
+- Server events: match lifecycle and scoring events (`opponent_joined`, `opp_arrow`, `set_resolved`, `set_tiebreak_started` with authoritative set scores, `opp_tiebreak_done`, `match_complete`, `tiebreak_started`), rematch events, challenge feed events, and matchmaking events.
 
 `frontend/js/core/ws.js` translates server `type` values into `EVENT_TYPES`; cross-module frontend communication goes through `EventBus`.
 

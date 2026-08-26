@@ -80,7 +80,7 @@ function switchToMatch(matchId) {
         isBot: false, isCreator: ch.is_creator ?? true, complete: false, firstToAct: null,
         challengeKind: 'normal', arrowValues: [], setArrowValues: [],
         setMyScore: 0, setOppScore: 0, currentSet: 1,
-        _tiebreakRequired: ch.tiebreak_required || false,
+        _tiebreakRequired: (ch.scoring !== 'sets' && ch.tiebreak_required) || false,
         _tiebreakMatchId:  ch.tiebreak_match_id || null,
       };
       switchToMatch(matchId);
@@ -351,9 +351,11 @@ async function _fetchAndResolveMatch(matchId) {
 
     const isTiebreak = status.scoring === 'tiebreak';
     const isSets     = status.scoring === 'sets' || ms.scoring === 'sets';
+    const isSetTiebreak = isSets && status.set_tiebreak === true;
     const isActive   = STATE.currentMatchId === matchId;
 
     ms._tiebreakRequired = isTiebreak;
+    ms._tiebreak         = isSetTiebreak;
     ms._tiebreakMatchId  = status.tiebreak_match_id || ms._tiebreakMatchId || null;
     ms.firstToAct        = status.first_to_act || ms.firstToAct;
 
@@ -365,6 +367,16 @@ async function _fetchAndResolveMatch(matchId) {
     }
 
     saveMatchState();
+
+    if (status.status === 'complete' && status.result) {
+      if (isActive) _setStatus('');
+      const myFinal  = isSets ? (status.my_set_points ?? 0) : (status.my_score ?? ms._totalMyScore ?? 0);
+      const oppFinal = isSets ? (status.opp_set_points ?? 0) : (status.opp_score ?? 0);
+      const tbArrows = status.tiebreak_my_arrow != null
+        ? { my: status.tiebreak_my_arrow, opp: status.tiebreak_opp_arrow } : null;
+      completeMatch(myFinal, oppFinal, matchId, status.result, tbArrows);
+      return;
+    }
 
     if (isTiebreak && isActive) {
       ms.arrowCount    = 1;
@@ -379,17 +391,24 @@ async function _fetchAndResolveMatch(matchId) {
       return;
     }
 
-    if (status.status === 'complete' && status.result) {
-      if (isActive) _setStatus('');
-      // The parent total remains the match score after sudden death. Do not
-      // use the locally cached tiebreak arrow as myFinal: before this status
-      // response it may have been the last value entered by this client.
-      const myFinal  = isSets ? (status.my_set_points  ?? 0) : (status.my_score  ?? ms._totalMyScore ?? 0);
-      const oppFinal = isSets ? (status.opp_set_points ?? 0) : (status.opp_score ?? 0);
-      const tbArrows = status.tiebreak_my_arrow != null
-        ? { my: status.tiebreak_my_arrow, opp: status.tiebreak_opp_arrow } : null;
-      completeMatch(myFinal, oppFinal, matchId, status.result, tbArrows);
+    if (isSetTiebreak && isActive) {
+      ms._pendingTiebreak = status.my_submitted || false;
+      renderMatchScene();
+      _setNumpadDisabled(status.my_submitted && !status.opp_submitted);
+      if (status.my_submitted) {
+        _setStatus(status.opp_submitted
+          ? 'Both submitted — calculating result…'
+          : `Score submitted — waiting for ${escHtml(ms.oppName)}…`);
+      } else if (status.opp_submitted) {
+        _setNumpadDisabled(false);
+        _setStatus(`${escHtml(ms.oppName)} already shot — shoot your arrow!`);
+      } else {
+        _setNumpadDisabled(false);
+        _setStatus(status.judge_status || 'Tiebreak — shoot one arrow each.');
+      }
+      return;
     }
+
   } catch (err) {
     if (err?.status === 404) {
       const isActive = STATE.currentMatchId === matchId;
@@ -439,7 +458,8 @@ async function restoreActiveMatchesFromServer() {
       matchType: ch.match_type, discipline: ch.discipline || 'target',
       isBot: false, isCreator: ch.is_creator ?? true, complete: false, firstToAct: null,
       challengeKind: 'normal',
-      _tiebreakRequired: ch.tiebreak_required || false,
+      _tiebreakRequired: (ch.scoring !== 'sets' && ch.tiebreak_required) || false,
+      _tiebreak:         (ch.scoring === 'sets' && ch.tiebreak_required) || false,
       _tiebreakMatchId:  ch.tiebreak_match_id || null,
       arrowValues:    local.arrowValues    || [],
       setArrowValues: local.setArrowValues || [],

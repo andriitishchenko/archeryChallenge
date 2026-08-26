@@ -64,7 +64,8 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Page reload during a total-score tiebreak → `/api/matches/{id}/status` returns the active tiebreak stage and child ID, then the frontend renders the restored state → the one-arrow sudden-death UI is preserved instead of returning to the parent match's original arrow count.
 - Completed total-score tiebreak → parent status keeps the original total scores and returns the final tiebreak arrows → the completion popup shows consistent totals and tiebreak values on both clients.
 - Set submission → stores the set arrows and resolves the set when both players submit the same set → points follow 2 for win, 1 for draw, 0 for loss; first to 6 wins.
-- Set score reaches 5:5 → starts sudden-death tiebreak scoring → one arrow is compared and equal arrows repeat.
+- Set score reaches 6:6 → persists Set System sudden death as set_number=0, broadcasts the authoritative 6:6 score and enters one-arrow input on both clients → set points remain 6:6, equal arrows reset the round, and a non-equal pair completes the parent match.
+- Set arrow submission → disables the local score buttons until the opponent result event or status response arrives → the client never resubmits cleared arrows and cannot send an empty set that the API rejects with 422.
 - Forfeit → marks the player as loss, the opponent as win, completes the match, and notifies the opponent → a completed match cannot be forfeited again.
 - Match inactivity → expiry worker completes a stale no-activity match as draw or awards win/loss to the timely submitter → notifications explain the timeout.
 - Opponent disconnects → connected opponents receive `opponent_disconnected` → match data remains persisted for recovery.
@@ -88,7 +89,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Overlapping My Challenges refreshes → only the newest server response updates state and the rendered list, and omitted local matches are reconciled through `/status` → an older in-flight response cannot restore a completed match card and a missed completion event still records/removes the match.
 - Background tiebreak event → retains the tiebreak stage and shows a notification without opening the match screen → the player can resume the match from the resume indicator.
 - Rematch proposal received outside the completion screen → shows a rematch toast and keeps the proposal available in My Challenges → the completion overlay is only used when the match screen is currently displayed.
-- Set score tied at 6:6 → broadcasts `set_tiebreak_started` to both participants → both players can enter the sudden-death arrow even if one is viewing another screen.
+- Set score tied at 6:6 → broadcasts `set_tiebreak_started` with both participants' 6:6 points and current first-to-act value → both players enter the same sudden-death state, including after a page reload or while one is viewing another screen.
 - Bot/offline fallback → supports local gameplay when the real opponent path is unavailable → it is not a substitute for persisted server data.
 
 ## Explicit current limits

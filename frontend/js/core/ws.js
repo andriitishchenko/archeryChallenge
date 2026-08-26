@@ -85,7 +85,11 @@ const WS = (() => {
         break;
 
       case 'set_tiebreak_started':
-        EventBus.emit(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, { matchId: msg.match_id });
+        EventBus.emit(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, {
+          matchId: msg.match_id, set_number: msg.set_number,
+          scores: msg.scores, next_first: msg.next_first,
+          round_tied: msg.round_tied,
+        });
         break;
 
       case 'opp_score_done':

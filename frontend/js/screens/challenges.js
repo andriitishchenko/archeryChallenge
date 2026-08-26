@@ -329,7 +329,9 @@ async function refreshMyChallenges() {
       matchType: ch.match_type, discipline: ch.discipline || 'target',
       isBot: false, isCreator: ch.is_creator ?? true, complete: false, firstToAct: null,
       challengeKind: 'normal',
-      _tiebreakRequired: ch.tiebreak_required || existing?._tiebreakRequired || false,
+      _tiebreakRequired: ch.scoring !== 'sets'
+        && (ch.tiebreak_required || existing?._tiebreakRequired || false),
+      _tiebreak:         (ch.scoring === 'sets' && ch.tiebreak_required) || existing?._tiebreak || false,
       _tiebreakMatchId:  ch.tiebreak_match_id || existing?._tiebreakMatchId || null,
       firstToAct:         existing?.firstToAct || null,
       _oppSetArrows:      existing?._oppSetArrows || [],

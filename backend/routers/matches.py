@@ -42,6 +42,44 @@ from ws.manager import manager
 router = APIRouter(prefix="/api", tags=["matches"])
 
 
+def _last_resolved_set(match: Match, db: Session) -> int:
+    """Return the last positive-numbered set submitted by both players."""
+    participants = [p for p in match.participants if not p.is_bot]
+    if len(participants) != 2:
+        return 0
+
+    def _numbers(participant_id: int) -> set[int]:
+        return {
+            row.set_number
+            for row in db.query(ArrowScore.set_number)
+            .filter(
+                ArrowScore.participant_id == participant_id,
+                ArrowScore.set_number > 0,
+            )
+            .distinct()
+            .all()
+        }
+
+    return max(_numbers(participants[0].id) & _numbers(participants[1].id), default=0)
+
+
+def _set_tiebreak_active(match: Match, db: Session) -> bool:
+    """Set-system sudden death starts at an active 6:6 set-point score."""
+    if (
+        match.status == "complete"
+        or not match.challenge
+        or match.challenge.scoring != ScoringEnum.sets
+    ):
+        return False
+    participants = [p for p in match.participants if not p.is_bot]
+    if len(participants) != 2:
+        return False
+    return (
+        count_set_points(participants[0], match.id, db) == 6
+        and count_set_points(participants[1], match.id, db) == 6
+    )
+
+
 # ── Set-system ────────────────────────────────────────────────────────────────
 
 @router.post("/matches/{match_id}/set", response_model=SetResult)
@@ -58,7 +96,7 @@ async def submit_set(
     World Archery Gold round rules:
       - Win → 2 pts · Draw → 1 pt each · Loss → 0 pts
       - First to 6 pts wins the match
-      - At 5:5 → sudden-death (set_number=0): highest single arrow wins; repeat if equal
+      - At 6:6 → sudden-death (set_number=0): highest single arrow wins; repeat if equal
       - Loser of a set shoots first next set; draw keeps same order
     """
     match     = load_match(match_id, db)
@@ -97,8 +135,125 @@ async def submit_set(
     me  = get_participant(match, current_user.id)
     opp = get_opponent(match, current_user.id)
 
+    is_set_scoring = challenge and challenge.scoring == ScoringEnum.sets
+    set_tiebreak_active = _set_tiebreak_active(match, db)
+
+    if is_set_scoring:
+        expected_arrows = 1 if set_tiebreak_active else 3
+        expected_set = 0 if set_tiebreak_active else _last_resolved_set(match, db) + 1
+        if sub.set_number != expected_set:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Sudden-death arrows must use set_number=0"
+                    if set_tiebreak_active
+                    else f"Expected current set {expected_set}"
+                ),
+            )
+        if len(sub.arrows) != expected_arrows:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Expected {expected_arrows} arrows, got {len(sub.arrows)}",
+            )
+
     # Restore in-memory participant registry if lost after server restart
     manager.ensure_match_registered(match_id, match.participants)
+
+    # Set-system sudden death is stored on the parent match with set_number=0.
+    # It must not contribute another set point, and its arrows remain available
+    # to the status endpoint for recovery after a page reload.
+    if is_set_scoring and set_tiebreak_active:
+        db.query(ArrowScore).filter(
+            ArrowScore.participant_id == me.id,
+            ArrowScore.set_number == 0,
+        ).delete()
+        for idx, val in enumerate(sub.arrows):
+            db.add(ArrowScore(
+                participant_id=me.id,
+                arrow_index=idx,
+                value=val,
+                set_number=0,
+            ))
+        db.flush()
+
+        my_name = get_profile_name(current_user.id, db)
+        opp_name = get_profile_name(opp.user_id, db) if opp else "Opponent"
+        opp_set_arrows = (
+            db.query(ArrowScore)
+            .filter(
+                ArrowScore.participant_id == opp.id,
+                ArrowScore.set_number == 0,
+            )
+            .order_by(ArrowScore.arrow_index)
+            .all()
+            if opp else []
+        )
+
+        if not opp_set_arrows:
+            db.commit()
+            if opp:
+                asyncio.create_task(manager.notify_match_opponent(match.id, current_user.id, {
+                    "type": "opp_tiebreak_done", "match_id": match.id,
+                }))
+            return SetResult(
+                set_number=0, both_submitted=False,
+                my_set_total=sum(sub.arrows), opp_set_total=None,
+                set_winner=None, my_set_points=6, opp_set_points=6,
+                match_complete=False, match_winner=None, match_result=None,
+                tiebreak_required=True, next_first_to_act=match.first_to_act,
+                judge_status=f"Tiebreak: your arrow recorded — waiting for {opp_name}…",
+            )
+
+        my_total = sum(sub.arrows)
+        opp_total = sum(a.value for a in opp_set_arrows)
+        if my_total == opp_total:
+            db.query(ArrowScore).filter(
+                ArrowScore.participant_id.in_([me.id, opp.id]),
+                ArrowScore.set_number == 0,
+            ).delete(synchronize_session=False)
+            db.commit()
+            asyncio.create_task(manager.notify_match_all(match.id, {
+                "type": "set_tiebreak_started",
+                "match_id": match.id,
+                "set_number": 0,
+                "scores": {
+                    current_user.id: {"total": my_total, "pts": 6},
+                    opp.user_id: {"total": opp_total, "pts": 6},
+                },
+                "next_first": match.first_to_act,
+                "round_tied": True,
+            }))
+            return SetResult(
+                set_number=0, both_submitted=True,
+                my_set_total=my_total, opp_set_total=opp_total,
+                set_winner="draw", my_set_points=6, opp_set_points=6,
+                match_complete=False, match_winner=None, match_result=None,
+                tiebreak_required=True, next_first_to_act=match.first_to_act,
+                judge_status="Tiebreak arrows tied — shoot one more arrow each.",
+            )
+
+        match_winner = "me" if my_total > opp_total else "opponent"
+        me.result = MatchResultEnum.win if match_winner == "me" else MatchResultEnum.loss
+        opp.result = MatchResultEnum.loss if match_winner == "me" else MatchResultEnum.win
+        me.final_score = opp.final_score = 6
+        match.status = "complete"
+        match.completed_at = datetime.utcnow()
+        db.commit()
+        asyncio.create_task(manager.notify_match_all(match.id, {
+            "type": "match_complete", "match_id": match.id,
+        }))
+        return SetResult(
+            set_number=0, both_submitted=True,
+            my_set_total=my_total, opp_set_total=opp_total,
+            set_winner="me" if match_winner == "me" else "opponent",
+            my_set_points=6, opp_set_points=6,
+            match_complete=True, match_winner=match_winner, match_result=match_winner,
+            tiebreak_required=False, next_first_to_act=None,
+            judge_status=(
+                f"Tiebreak complete — {my_name} wins!"
+                if match_winner == "me" else f"Tiebreak complete — {opp_name} wins."
+            ),
+        )
 
     # Persist set arrows (replace on resubmit)
     db.query(ArrowScore).filter(
@@ -192,6 +347,12 @@ async def submit_set(
         else:
             asyncio.create_task(manager.notify_match_all(match_id, {
                 "type": "set_tiebreak_started", "match_id": match_id,
+                "set_number": sub.set_number,
+                "scores": {
+                    current_user.id: {"total": my_total, "pts": new_my_pts},
+                    opp.user_id: {"total": opp_total, "pts": new_opp_pts},
+                },
+                "next_first": next_first,
             }))
     else:
         if set_winner == "me":
@@ -399,6 +560,7 @@ def get_match_status(
             current_set=1, sets=[], first_to_act=None,
             judge_status="Waiting for opponent to join…",
             tiebreak_match_id=None,
+            set_tiebreak=False,
         )
 
     me        = get_participant(match, current_user.id)
@@ -409,6 +571,20 @@ def get_match_status(
 
     tb_match     = get_tiebreak_match(match.id, db)
     tiebreak_req = tb_match is not None and tb_match.status != "complete"
+    set_points_my = count_set_points(me, match.id, db) if scoring == "sets" else 0
+    set_points_opp = count_set_points(opp, match.id, db) if (scoring == "sets" and opp) else 0
+    set_tiebreak = (
+        scoring == "sets"
+        and set_points_my == 6
+        and set_points_opp == 6
+        and (
+            match.status != "complete"
+            or db.query(ArrowScore).filter(
+                ArrowScore.participant_id == me.id,
+                ArrowScore.set_number == 0,
+            ).first() is not None
+        )
+    )
 
     sets_out    = []
     current_set = 1
@@ -429,9 +605,10 @@ def get_match_status(
         for sn in sorted(set(my_map) | set(opp_map)):
             mt, ot = my_map.get(sn), opp_map.get(sn)
             winner = None
-            if mt is not None and ot is not None:
+            if sn > 0 and mt is not None and ot is not None:
                 winner = "me" if mt > ot else ("opponent" if ot > mt else "draw")
-            sets_out.append({"set_number": sn, "my_total": mt, "opp_total": ot, "winner": winner})
+            if sn > 0:
+                sets_out.append({"set_number": sn, "my_total": mt, "opp_total": ot, "winner": winner})
 
         # current_set = last RESOLVED set (both submitted) + 1
         # Unresolved sets (only one player submitted) do NOT advance the counter.
@@ -442,10 +619,23 @@ def get_match_status(
         current_set = last_resolved + 1
 
     opp_name = get_profile_name(opp.user_id, db) if opp else "Opponent"
-    judge    = build_judge_status(match, me, opp, scoring, current_set, tiebreak_req, opp_name, current_user.id)
+    judge = (
+        "Scores tied at 6:6 — sudden-death! Shoot one arrow each."
+        if set_tiebreak
+        else build_judge_status(match, me, opp, scoring, current_set, tiebreak_req, opp_name, current_user.id)
+    )
 
     opp_current_set_arrows = None
-    if scoring == "sets" and opp:
+    if scoring == "sets" and set_tiebreak and opp:
+        my_tb_rows = db.query(ArrowScore).filter(
+            ArrowScore.participant_id == me.id, ArrowScore.set_number == 0,
+        ).all()
+        opp_tb_rows = db.query(ArrowScore).filter(
+            ArrowScore.participant_id == opp.id, ArrowScore.set_number == 0,
+        ).all()
+        my_submitted = bool(my_tb_rows)
+        opp_submitted = bool(opp_tb_rows)
+    elif scoring == "sets" and opp:
         opp_set_rows = (
             db.query(ArrowScore)
             .filter(
@@ -472,6 +662,15 @@ def get_match_status(
         my_submitted  = me.submitted_at  is not None
 
     tiebreak_my_arrow = tiebreak_opp_arrow = None
+    if scoring == "sets" and set_tiebreak:
+        my_tb_rows = db.query(ArrowScore).filter(
+            ArrowScore.participant_id == me.id, ArrowScore.set_number == 0,
+        ).order_by(ArrowScore.arrow_index).all()
+        opp_tb_rows = db.query(ArrowScore).filter(
+            ArrowScore.participant_id == opp.id, ArrowScore.set_number == 0,
+        ).order_by(ArrowScore.arrow_index).all() if opp else []
+        tiebreak_my_arrow = my_tb_rows[0].value if my_tb_rows else None
+        tiebreak_opp_arrow = opp_tb_rows[0].value if opp_tb_rows else None
     if tb_match:
         tb_me  = next((p for p in tb_match.participants if p.user_id == current_user.id), None)
         tb_opp = next((p for p in tb_match.participants if p.user_id != current_user.id), None)
@@ -499,15 +698,16 @@ def get_match_status(
         opp_submitted=opp_submitted, my_submitted=my_submitted,
         tiebreak_my_arrow=tiebreak_my_arrow, tiebreak_opp_arrow=tiebreak_opp_arrow,
         result=result,
-        my_set_points=count_set_points(me,  match.id, db) if scoring == "sets" else (me.final_score or 0),
+        my_set_points=set_points_my if scoring == "sets" else (me.final_score or 0),
         opp_set_points=(
-            count_set_points(opp, match.id, db) if (scoring == "sets" and opp)
+            set_points_opp if (scoring == "sets" and opp)
             else (opp.final_score or 0 if opp else 0)
         ),
         current_set=current_set, sets=sets_out,
         first_to_act=match.first_to_act, judge_status=judge,
         opp_current_set_arrows=opp_current_set_arrows,
         tiebreak_match_id=tb_match.id if tiebreak_req and tb_match else None,
+        set_tiebreak=set_tiebreak,
     )
 
 
@@ -599,6 +799,8 @@ def get_my_dashboard(
             tb = get_tiebreak_match(match.id, db)
             tiebreak_req  = tb is not None and tb.status != "complete"
             tb_match_id   = tb.id if tb else None
+            if not tiebreak_req and _set_tiebreak_active(match, db):
+                tiebreak_req = True
             if not tiebreak_req:
                 human    = [x for x in match.participants if not x.is_bot]
                 all_done = all(x.submitted_at is not None for x in human)
@@ -773,6 +975,9 @@ def _collect_active_match_rows(user_id: str, db: Session) -> List[ActiveMatchOut
 
         tb_match     = get_tiebreak_match(match.id, db)
         tiebreak_req = tb_match is not None and tb_match.status != "complete"
+
+        if not tiebreak_req and _set_tiebreak_active(match, db):
+            tiebreak_req = True
 
         if not tiebreak_req:
             human    = [p2 for p2 in match.participants if not p2.is_bot]

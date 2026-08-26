@@ -82,6 +82,7 @@ def count_set_points(participant: MatchParticipant, match_id: str, db: Session) 
             .filter(
                 ArrowScore.participant_id == pid,
                 ArrowScore.set_number.isnot(None),
+                ArrowScore.set_number > 0,
             )
             .group_by(ArrowScore.set_number)
             .all()
