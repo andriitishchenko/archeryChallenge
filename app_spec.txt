@@ -137,6 +137,7 @@
     <Stats>
       - GET /api/history
       - GET /api/ranking?bow_type=
+      - GET /api/ranking/me
       - GET /api/achievements
     </Stats>
   </api_endpoints_summary>

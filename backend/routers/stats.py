@@ -2,6 +2,7 @@
 Stats endpoints:
   GET /api/history       — match history
   GET /api/ranking       — global leaderboard
+  GET /api/ranking/me    — current user's rating summary
   GET /api/achievements  — achievement badges
 """
 from typing import List, Optional
@@ -12,9 +13,9 @@ from sqlalchemy.orm import Session
 from core.deps import get_db, get_current_user
 from models.models import (
     Challenge, ChallengeKindEnum, Match, MatchParticipant,
-    MatchResultEnum, Profile, User,
+    MatchResultEnum, Profile, ScoringEnum, User,
 )
-from schemas.stats import AchievementItem, HistoryItem, RankingEntry
+from schemas.stats import AchievementItem, HistoryItem, RankingEntry, RankingSummary
 from services.match import get_opponent, load_match
 from services.tiebreak import get_tiebreak_match
 
@@ -90,50 +91,167 @@ def get_history(
     return result
 
 
+def _calculate_ranking_stats(db: Session) -> dict:
+    """Build cumulative rating stats from completed normal human matches.
+
+    The rating is additive: every completed match contributes participation
+    points, results contribute the largest component, and a total-score match
+    can add a bounded score-quality component. This keeps a new athlete at
+    zero while rewarding both activity and performance over time.
+    """
+    rows = (
+        db.query(MatchParticipant, Match, Challenge)
+        .join(Match, MatchParticipant.match_id == Match.id)
+        .join(Challenge, Match.challenge_id == Challenge.id)
+        .filter(
+            MatchParticipant.result != MatchResultEnum.pending,
+            MatchParticipant.is_bot == False,
+            Challenge.challenge_kind == ChallengeKindEnum.normal,
+        )
+        .order_by(
+            Match.completed_at.asc(),
+            Match.created_at.asc(),
+            MatchParticipant.submitted_at.asc(),
+        )
+        .all()
+    )
+
+    stats_by_user: dict = {}
+    for participant, _match, challenge in rows:
+        stats = stats_by_user.setdefault(
+            participant.user_id,
+            {
+                "rating": 0,
+                "wins": 0,
+                "matches": 0,
+                "total_score": 0,
+                "score_count": 0,
+                "current_streak": 0,
+                "win_streak": 0,
+            },
+        )
+        stats["matches"] += 1
+        stats["rating"] += 10  # completed-match participation
+
+        if participant.final_score is not None:
+            stats["total_score"] += participant.final_score
+            stats["score_count"] += 1
+
+        if participant.result == MatchResultEnum.win:
+            stats["wins"] += 1
+            stats["current_streak"] += 1
+            stats["win_streak"] = max(stats["win_streak"], stats["current_streak"])
+            stats["rating"] += 100
+            # Cap the per-win streak bonus so a long streak matters without
+            # making all other results irrelevant.
+            stats["rating"] += min(stats["current_streak"], 5) * 10
+        elif participant.result == MatchResultEnum.draw:
+            stats["current_streak"] = 0
+            stats["rating"] += 40
+        else:
+            stats["current_streak"] = 0
+
+        # Only total-score matches have a comparable arrow-score maximum.
+        # The bounded bonus rewards score quality for both wins and losses.
+        if (
+            challenge.scoring == ScoringEnum.total
+            and challenge.arrow_count
+            and participant.final_score is not None
+        ):
+            max_score = challenge.arrow_count * 10
+            score_ratio = max(0.0, min(1.0, participant.final_score / max_score))
+            stats["rating"] += round(score_ratio * 25)
+
+    return stats_by_user
+
+
+def _ranked_users(db: Session, bow_type: Optional[str] = None) -> list:
+    stats_by_user = _calculate_ranking_stats(db)
+    profiles = {
+        profile.user_id: profile
+        for profile in db.query(Profile).filter(Profile.user_id.in_(stats_by_user)).all()
+    }
+
+    ranked = []
+    for user_id, stats in stats_by_user.items():
+        profile = profiles.get(user_id)
+        if not profile or (bow_type and profile.bow_type.value != bow_type):
+            continue
+        avg_score = (
+            stats["total_score"] / stats["score_count"]
+            if stats["score_count"] else 0
+        )
+        ranked.append({
+            "user_id": user_id,
+            "profile": profile,
+            "rating": stats["rating"],
+            "wins": stats["wins"],
+            "matches": stats["matches"],
+            "avg_score": round(avg_score, 1),
+            "win_streak": stats["win_streak"],
+        })
+
+    ranked.sort(
+        key=lambda item: (
+            -item["rating"],
+            -item["wins"],
+            -item["win_streak"],
+            -item["avg_score"],
+            -item["matches"],
+            item["user_id"],
+        )
+    )
+    return ranked
+
+
 @router.get("/ranking", response_model=List[RankingEntry])
 def get_ranking(
     bow_type: Optional[str] = None,
     limit:    int           = 50,
     db:       Session       = Depends(get_db),
 ):
-    participants = (
-        db.query(MatchParticipant)
-        .join(Match,     MatchParticipant.match_id    == Match.id)
-        .join(Challenge, Match.challenge_id            == Challenge.id)
-        .filter(
-            MatchParticipant.result   != MatchResultEnum.pending,
-            MatchParticipant.is_bot   == False,
-            Challenge.challenge_kind  == ChallengeKindEnum.normal,
+    ranked = _ranked_users(db, bow_type)[:max(0, limit)]
+    return [
+        RankingEntry(
+            rank=index,
+            user_id=item["user_id"],
+            name=item["profile"].name,
+            bow_type=item["profile"].bow_type.value,
+            rating=item["rating"],
+            wins=item["wins"],
+            matches_played=item["matches"],
+            avg_score=item["avg_score"],
+            win_streak=item["win_streak"],
         )
-        .all()
+        for index, item in enumerate(ranked, 1)
+    ]
+
+
+@router.get("/ranking/me", response_model=RankingSummary)
+def get_my_ranking(
+    current_user: User    = Depends(get_current_user),
+    db:           Session = Depends(get_db),
+):
+    ranked = _ranked_users(db)
+    for index, item in enumerate(ranked, 1):
+        if item["user_id"] == current_user.id:
+            return RankingSummary(
+                rank=index,
+                rating=item["rating"],
+                wins=item["wins"],
+                matches_played=item["matches"],
+                avg_score=item["avg_score"],
+                win_streak=item["win_streak"],
+            )
+
+    return RankingSummary(
+        rank=0,
+        rating=0,
+        wins=0,
+        matches_played=0,
+        avg_score=0,
+        win_streak=0,
     )
-
-    user_stats: dict = {}
-    for p in participants:
-        uid = p.user_id
-        if uid not in user_stats:
-            user_stats[uid] = {"wins": 0, "matches": 0, "total_score": 0}
-        user_stats[uid]["matches"] += 1
-        if p.result == MatchResultEnum.win:
-            user_stats[uid]["wins"] += 1
-        if p.final_score:
-            user_stats[uid]["total_score"] += p.final_score
-
-    sorted_users = sorted(user_stats.items(), key=lambda x: x[1]["wins"], reverse=True)[:limit]
-
-    result = []
-    for rank, (uid, stats) in enumerate(sorted_users, 1):
-        profile = db.query(Profile).filter(Profile.user_id == uid).first()
-        if not profile:
-            continue
-        if bow_type and profile.bow_type.value != bow_type:
-            continue
-        avg = stats["total_score"] / stats["matches"] if stats["matches"] > 0 else 0
-        result.append(RankingEntry(
-            rank=rank, user_id=uid, name=profile.name, bow_type=profile.bow_type.value,
-            wins=stats["wins"], matches_played=stats["matches"], avg_score=round(avg, 1),
-        ))
-    return result
 
 
 @router.get("/achievements", response_model=List[AchievementItem])

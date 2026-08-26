@@ -24,10 +24,12 @@ function saveToHistory(ms) {
 
 async function refreshHistory() {
   let serverAchievements = null;
+  let serverRanking = null;
   try {
-    const [histData, achData] = await Promise.all([
+    const [histData, achData, rankingData] = await Promise.all([
       api('GET', '/api/history?limit=30'),
       api('GET', '/api/achievements'),
+      api('GET', '/api/ranking/me'),
     ]);
     if (histData) {
       STATE.history = histData.map(h => ({
@@ -46,22 +48,21 @@ async function refreshHistory() {
       localStorage.setItem('arrowmatch_history', JSON.stringify(STATE.history));
     }
     if (achData) serverAchievements = achData;
+    if (rankingData) serverRanking = rankingData;
   } catch {}
 
-  renderStats();
+  renderStats(serverRanking);
   renderAchievements(serverAchievements);
   renderHistoryList();
 }
 
-function renderStats() {
-  const last10   = STATE.history.slice(0, 10);
-  const wins     = last10.filter(h => h.result === 'win').length;
-  const avgScore = last10.length
-    ? Math.round(last10.reduce((a, h) => a + h.myScore, 0) / last10.length) : 0;
-  const globalRank = Math.max(1, 1000 - wins * 50);
+function renderStats(serverRanking = null) {
+  const avgScore = serverRanking?.avg_score || 0;
+  const wins = serverRanking?.wins || 0;
+  const rating = serverRanking?.rating || 0;
   document.getElementById('stat-avg').textContent  = avgScore || '—';
   document.getElementById('stat-wins').textContent = wins;
-  document.getElementById('stat-rank').textContent = `#${globalRank}`;
+  document.getElementById('stat-rank').textContent = rating;
 }
 
 function renderAchievements(serverBadges = null) {

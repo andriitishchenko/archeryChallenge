@@ -21,9 +21,20 @@ class RankingEntry(BaseModel):
     user_id:        str
     name:           str
     bow_type:       str
+    rating:         int
     wins:           int
     matches_played: int
     avg_score:      float
+    win_streak:     int
+
+
+class RankingSummary(BaseModel):
+    rank:           int
+    rating:         int
+    wins:           int
+    matches_played: int
+    avg_score:      float
+    win_streak:     int
 
 
 class AchievementItem(BaseModel):

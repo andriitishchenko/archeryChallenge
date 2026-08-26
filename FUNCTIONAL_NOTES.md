@@ -11,7 +11,7 @@ This is a compact behavior ledger for implemented functionality. It protects exi
 | Total/set scoring, tiebreak, forfeit | Implemented | Server scoring and state transitions exist. |
 | WebSocket events and matchmaking | Implemented | Single-user socket, human matching, offline queue, and bot fallback exist. |
 | Rematch flow | Implemented | Propose, accept, decline, and original-ID recovery exist. |
-| History, ranking, achievements | Implemented | Server endpoints and frontend rendering exist. |
+| History, ranking, achievements | Implemented | Server endpoints calculate cumulative rating/stats; the history screen renders the server summary. |
 | Expiry and inactivity handling | Implemented | Background worker handles deadlines and stale matches. |
 | Scheduled-match start semantics | Partial | Deadline validation exists, but joining starts the match immediately. |
 | Non-target disciplines | Partial | Enum values exist, but server scoring rejects them with HTTP 501. |
@@ -86,7 +86,9 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 
 ### History, ranking, and client state
 
-- Completed human matches → appear in history and contribute to ranking → tiebreak child matches are not counted as separate normal matches.
+- Completed human matches → the server adds 10 participation points, 100 win points (40 for a draw), a bounded total-score quality bonus, and a capped consecutive-win bonus → rating starts at 0, accumulates across normal matches, and tiebreak children are not counted as separate matches.
+- History screen refresh → requests `/api/ranking/me` and renders its cumulative rating, wins, and average score → a user with no completed match displays rating 0; the client no longer derives a fake rank from only the last 10 local entries.
+- Global ranking request → server calculates the same cumulative rating for every completed human normal match and sorts by rating with wins, best streak, average score, and match count as tie-breakers → `/api/ranking` returns authoritative rating/rank values and `/api/ranking/me` returns the current user's summary.
 - Achievement request → calculates the maximum historical consecutive-win streak from completed parent matches and evaluates 5, 10, and 25-win badges independently → once a streak has occurred, a later loss or draw does not un-highlight the smaller completed streak badge.
 - Active match state → is kept in `STATE.activeMatches[matchId]` and cached in local storage for session recovery → server status wins over stale browser cache.
 - Starting or switching to a match → resets the local arrow input, shared status message, and transient opponent live-result indicator, then restores only the selected match's server state → a parallel or rematch session cannot display scores, waiting text, or stale live preview carried over from the previously displayed match.

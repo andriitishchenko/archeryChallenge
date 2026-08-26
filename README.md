@@ -114,7 +114,7 @@ All protected HTTP requests use `Authorization: Bearer <access_token>`.
 | Challenges | `GET/POST /api/challenges`, `GET /api/challenges/mine`, `GET /api/challenges/{id}`, `DELETE /api/challenges/{id}`, `POST /api/challenges/{id}/join` |
 | Matches | `GET /api/matches/mine/active`, `GET /api/matches/{id}`, `GET /api/matches/{id}/status`, `POST /api/matches/{id}/set`, `POST /api/matches/{id}/score`, `POST /api/matches/{id}/forfeit` |
 | Rematch | `POST /api/matches/{id}/rematch`, `/rematch/accept`, `/rematch/decline` |
-| Stats | `GET /api/history`, `GET /api/ranking`, `GET /api/achievements`, `GET /api/my-challenges` |
+| Stats | `GET /api/history`, `GET /api/ranking`, `GET /api/ranking/me`, `GET /api/achievements`, `GET /api/my-challenges` |
 
 The complete request/response contract is defined by the Pydantic schemas in `backend/schemas/` and exposed through `/docs` in debug mode. Update schemas, routers, and this table together when an API contract changes.
 
