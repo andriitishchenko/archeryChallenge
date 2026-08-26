@@ -12,6 +12,12 @@ const BOT_SKILL = {
   'Master':   { mean: 9.5, dev: 0.5 },
 };
 
+const BOT_RESULT_COEFFICIENT = {
+  Beginner: -0.35,
+  Skilled:   0.25,
+  Master:    0.55,
+};
+
 function genBotArrow(skill) {
   const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);
@@ -37,6 +43,11 @@ function _botClamp(value, min = 0, max = 10) {
 
 function _botRandomInt(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function _botResultCoefficient(ms) {
+  return BOT_RESULT_COEFFICIENT[ms?.oppSkill || 'Skilled']
+    ?? BOT_RESULT_COEFFICIENT.Skilled;
 }
 
 function _botAveragePerArrow() {
@@ -82,7 +93,19 @@ function _botShadowRound(ms, round, count) {
       playerArrows: new Array(count).fill(null),
     };
   }
-  return ms._botShadow;
+  const state = ms._botShadow;
+  // Older localStorage snapshots may predate playerArrows. Rebuild that
+  // transient array from the user's saved input instead of crashing on reload.
+  if (!Array.isArray(state.playerArrows) || state.playerArrows.length !== count) {
+    const savedValues = ms.scoring === 'sets' ? ms.setArrowValues : ms.arrowValues;
+    state.playerArrows = new Array(count).fill(null);
+    if (Array.isArray(savedValues)) {
+      savedValues.slice(0, count).forEach((value, index) => {
+        if (Number.isFinite(value)) state.playerArrows[index] = value;
+      });
+    }
+  }
+  return state;
 }
 
 function _botShadowRoundName(ms) {
@@ -91,6 +114,14 @@ function _botShadowRoundName(ms) {
     return ms._tiebreak ? 'set-tiebreak' : `set-${ms.currentSet || 1}`;
   }
   return 'total';
+}
+
+function _botLastPlayerValue(state) {
+  const values = Array.isArray(state.playerArrows) ? state.playerArrows : [];
+  for (let index = values.length - 1; index >= 0; index--) {
+    if (Number.isFinite(values[index])) return values[index];
+  }
+  return null;
 }
 
 function botShadowShoot(ms, index, userValue, count) {
@@ -105,10 +136,12 @@ function botShadowShoot(ms, index, userValue, count) {
     // Mirror the live series immediately. This is deliberately driven by the
     // current input, not only by old history, so a run of 10s is visible as a
     // run near 10s on the opponent side before submission.
-    const reference = enteredMean === null
-      ? state.mean
-      : enteredMean * 0.8 + state.mean * 0.2;
-    const jitter = (Math.random() * 2 - 1) * 0.8;
+    const lastPlayerValue = _botLastPlayerValue(state);
+    const coefficient = _botResultCoefficient(ms);
+    const reference = lastPlayerValue === null
+      ? (enteredMean === null ? state.mean : enteredMean)
+      : lastPlayerValue + coefficient;
+    const jitter = (Math.random() * 2 - 1) * 0.6;
     state.arrows[index] = Math.round(_botClamp(
       reference + jitter,
     ));
@@ -145,16 +178,16 @@ function botShadowFinalize(ms, userTotal, count) {
     : value);
   const maximum = count * 10;
   const playerMean = Number.isFinite(userTotal) && count > 0 ? userTotal / count : state.mean;
-  const baseline = playerMean * count;
+  const coefficient = _botResultCoefficient(ms);
+  const baseline = playerMean * count + coefficient * count;
   let target = Math.round(baseline + (Math.random() * 2 - 1) * Math.max(1, count * 0.12));
 
-  // Roughly one quarter of rounds deliberately give the bot a narrow edge;
-  // another quarter gives the player an edge. The remaining rounds follow
-  // the player's current performance with a small natural variation.
+  // The bot has a small coefficient-based edge more often than not, while
+  // some rounds still give the player the advantage for a natural result.
   const outcome = Math.random();
   const margin = _botRandomInt(1, Math.max(1, Math.round(count * 0.2)));
-  if (outcome < 0.25) target = userTotal + margin;
-  else if (outcome < 0.50) target = userTotal - margin;
+  if (outcome < 0.35) target = userTotal + margin;
+  else if (outcome < 0.55) target = userTotal - margin;
   target = Math.round(_botClamp(target, 0, maximum));
 
   state.arrows = _botMoveToTarget(arrows, target);
