@@ -167,43 +167,22 @@ function botShadowDelete(ms, index, count) {
   return [...state.arrows];
 }
 
-function _botMoveToTarget(arrows, target) {
-  let difference = target - arrows.reduce((sum, value) => sum + value, 0);
-  for (let index = arrows.length - 1; index >= 0 && difference !== 0; index--) {
-    const room = difference > 0 ? 10 - arrows[index] : arrows[index];
-    const step = difference > 0
-      ? Math.min(difference, room)
-      : -Math.min(-difference, room);
-    arrows[index] += step;
-    difference -= step;
-  }
-  return arrows;
-}
-
 function botShadowFinalize(ms, userTotal, count) {
   if (!ms?.isBot) return [];
   const state = _botShadowRound(ms, _botShadowRoundName(ms), count);
   const arrows = state.arrows.map(value => value == null
-    ? Math.round(_botClamp(state.mean + (Math.random() * 2 - 1) * 0.8))
+    ? Math.round(_botClamp(
+      state.mean
+        + _botResultCoefficient(ms)
+        + (Math.random() * 2 - 1) * _botResultSpread(ms),
+    ))
     : value);
-  const maximum = count * 10;
   const playerMean = Number.isFinite(userTotal) && count > 0 ? userTotal / count : state.mean;
-  const coefficient = _botResultCoefficient(ms);
-  const profile = BOT_SKILL[ms.oppSkill || 'Skilled'] || BOT_SKILL.Skilled;
-  // Keep the bot broadly calibrated to the player's form and skill edge, but
-  // use a symmetric total swing so the final result can move either way.
-  const baselinePerArrow = playerMean
-    + coefficient
-    + (profile.mean - playerMean) * 0.15;
-  const baseline = baselinePerArrow * count;
-  const totalSpread = Math.max(3, count * _botResultSpread(ms) * 0.35);
-  let target = Math.round(baseline + (Math.random() * 2 - 1) * totalSpread);
-  target = Math.round(_botClamp(target, 0, maximum));
-
-  state.arrows = _botMoveToTarget(arrows, target);
-  // Keep the exact array used for the result so the completion overlay can
-  // replace any stale live preview with the same values that were scored.
-  ms._botFinalArrows = [...state.arrows];
+  // Finalization must score the same arrows that were shown during the round.
+  // Only missing values (for example after restoring an old local snapshot)
+  // are generated here; never alter an already-shot bot arrow to hit a target.
+  state.arrows = arrows;
+  ms._botFinalArrows = [...arrows];
   if (Number.isFinite(playerMean)) {
     if (!Array.isArray(ms._botPlayerRoundAverages)) ms._botPlayerRoundAverages = [];
     ms._botPlayerRoundAverages.push(playerMean);
