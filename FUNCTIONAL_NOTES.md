@@ -44,6 +44,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Repeated register/login attempts → sliding-window IP rate limit applies → excess attempts receive HTTP 429.
 - `PUT /api/profile` → creates or updates the authenticated user's profile → challenge creation and joining remain blocked until a profile exists.
 - Browser session restore → validates `/api/auth/me`, reloads the profile, restores server matches, and opens the single user WebSocket → invalid sessions are cleared and return to entry.
+- Page reload/close or browser/device Back with an unfinished match → requests native leave confirmation and keeps the SPA history sentinel when cancelled → the match remains available; leaving without an active match is not blocked.
 
 ### Challenges
 

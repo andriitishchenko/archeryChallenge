@@ -13,8 +13,59 @@ document.addEventListener('DOMContentLoaded', init);
 function init() {
   loadCountries();
   _registerNavigationSubscriptions();
+  _installNavigationGuard();
   restoreSession();
   setupInviteMessageCounter();
+}
+
+// ── Accidental navigation protection ─────────────────────────────────────────
+
+let _allowNavigation = false;
+let _navigationGuardState = null;
+
+function _hasActiveMatchToProtect() {
+  return Object.values(STATE.activeMatches).some(ms => ms && !ms.complete);
+}
+
+function _confirmLeavingActiveMatch() {
+  if (!_hasActiveMatchToProtect()) return true;
+  return window.confirm('You have an active match. Are you sure you want to leave?');
+}
+
+function _installNavigationGuard() {
+  // beforeunload uses the browser's native wording. Modern browsers ignore
+  // custom text, but returnValue is still required to request confirmation.
+  window.addEventListener('beforeunload', (event) => {
+    if (_allowNavigation) {
+      _allowNavigation = false;
+      return;
+    }
+    if (!_hasActiveMatchToProtect()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  // Add a same-URL sentinel so browser/device Back can be confirmed before
+  // the document is unloaded. Cancelling restores the sentinel; confirming
+  // consumes it and proceeds to the previous page.
+  _navigationGuardState = {
+    ...(window.history.state || {}),
+    arrowmatchNavigationGuard: true,
+  };
+  window.history.pushState(_navigationGuardState, '', window.location.href);
+  window.addEventListener('popstate', () => {
+    if (_allowNavigation) {
+      _allowNavigation = false;
+      return;
+    }
+    if (!_hasActiveMatchToProtect()) return;
+    if (!_confirmLeavingActiveMatch()) {
+      window.history.pushState(_navigationGuardState, '', window.location.href);
+      return;
+    }
+    _allowNavigation = true;
+    window.history.back();
+  });
 }
 
 // ── Navigation EventBus subscriptions ────────────────────────────────────────
@@ -116,7 +167,9 @@ function showScene(name) {
   document.getElementById('back-btn').classList.toggle('hidden', name !== 'challenge');
 }
 
-function goBack() { showScene('list-challenge'); }
+function goBack() {
+  if (_confirmLeavingActiveMatch()) showScene('list-challenge');
+}
 
 async function _refreshMatchScene() {
   const ms = STATE.matchState;

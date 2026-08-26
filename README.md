@@ -127,6 +127,8 @@ Connect to `/ws/user?token=<access_token>`. The connection is persistent for the
 
 `frontend/js/core/ws.js` translates server `type` values into `EVENT_TYPES`; cross-module frontend communication goes through `EventBus`.
 
+The frontend asks for confirmation before reload/close or browser Back while an unfinished match is active; the in-app Back action uses the same guard.
+
 The server logger `arrowmatch.websocket` records WebSocket connect/disconnect, incoming messages, routing recipients, outgoing messages, offline queueing, and send failures at INFO/WARNING level. Run Uvicorn with its default INFO log level to see these diagnostics.
 
 The browser console records outgoing API requests as `[API →] request` and outgoing WebSocket messages as `[WS →] message`; connection lifecycle and skipped sends are logged too. Sensitive token, password, secret, and authorization values are redacted.
