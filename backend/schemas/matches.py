@@ -77,6 +77,8 @@ class MatchStatusOut(BaseModel):
     judge_status:             str
     # Individual arrow values opponent submitted for the current set (null if not yet submitted)
     opp_current_set_arrows:   Optional[List[Optional[int]]] = None
+    # Active child match used for total-score sudden death, if any.
+    tiebreak_match_id:         Optional[str] = None
 
 
 class MatchParticipantOut(BaseModel):

@@ -106,7 +106,12 @@ async function _refreshMatchScene() {
   }
   try {
     const status = await api('GET', `/api/matches/${ms.id}/status`);
-    if (!status) return;
+    if (!status) {
+      // Keep the locally restored stage visible if the status request is
+      // temporarily unavailable.
+      renderMatchScene();
+      return;
+    }
 
     if (status.status === 'waiting') {
       _setNumpadDisabled(true);
@@ -119,6 +124,7 @@ async function _refreshMatchScene() {
 
     // ── Restore authoritative server state into matchState ────────────────
     ms._tiebreakRequired = isTiebreak;
+    ms._tiebreakMatchId  = status.tiebreak_match_id || ms._tiebreakMatchId || null;
     ms.firstToAct        = status.first_to_act || ms.firstToAct;
 
     if (isTiebreak) {

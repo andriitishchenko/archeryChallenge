@@ -333,6 +333,7 @@ async function _fetchAndResolveMatch(matchId) {
     const isActive   = STATE.currentMatchId === matchId;
 
     ms._tiebreakRequired = isTiebreak;
+    ms._tiebreakMatchId  = status.tiebreak_match_id || ms._tiebreakMatchId || null;
     ms.firstToAct        = status.first_to_act || ms.firstToAct;
 
     // Always sync set-points and current set from server (authoritative)

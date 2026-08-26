@@ -16,6 +16,7 @@ The WS is used only for real-time push (server→client) and low-latency
 arrow streaming (client→server→opponent).
 """
 import json
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
@@ -24,6 +25,7 @@ from core.security import get_user_id_from_token
 from ws.manager import manager
 
 router = APIRouter(tags=["websocket"])
+log = logging.getLogger("arrowmatch.websocket")
 
 
 async def _auth_and_accept(websocket: WebSocket, token: Optional[str]) -> Optional[str]:
@@ -31,6 +33,7 @@ async def _auth_and_accept(websocket: WebSocket, token: Optional[str]) -> Option
     await websocket.accept()
     user_id = get_user_id_from_token(token) if token else None
     if not user_id:
+        log.warning("WS AUTH_FAILED token_present=%s", bool(token))
         await websocket.close(code=4001, reason="Unauthorized")
         return None
     return user_id
@@ -61,6 +64,7 @@ async def ws_user(
     """
     user_id = await _auth_and_accept(websocket, token)
     if not user_id:
+        log.warning("WS AUTH_FAILED")
         return
 
     manager.register_user_socket(user_id, websocket)
@@ -71,12 +75,18 @@ async def ws_user(
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
+                log.warning("WS RECV_INVALID user=%s raw=%r", user_id, raw)
                 continue
 
             t = msg.get("type")
+            log.info(
+                "WS RECV user=%s type=%s match=%s payload=%s",
+                user_id, t, msg.get("match_id"),
+                json.dumps(msg, ensure_ascii=False, sort_keys=True, default=str),
+            )
 
             if t == "ping":
-                await manager.send_personal(websocket, {"type": "pong"})
+                await manager.send_personal(websocket, {"type": "pong"}, recipient_id=user_id)
 
             # ── Live arrow streaming (low-latency indicator only) ───────────
             elif t == "arrow":
@@ -101,11 +111,13 @@ async def ws_user(
 
             elif t == "mm_cancel":
                 manager.leave_matchmaking(user_id)
-                await manager.send_personal(websocket, {"type": "mm_cancelled"})
+                await manager.send_personal(websocket, {"type": "mm_cancelled"}, recipient_id=user_id)
 
-            # Unknown message types are silently ignored
+            else:
+                log.warning("WS RECV_UNKNOWN user=%s type=%s", user_id, t)
 
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as exc:
+        log.info("WS CLOSED user=%s code=%s", user_id, exc.code)
         manager.unregister_user_socket(user_id, websocket)
         manager.leave_matchmaking(user_id)
         await manager.notify_user_disconnected(user_id)

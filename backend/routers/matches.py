@@ -245,8 +245,9 @@ async def submit_score(
     """
     match = load_match(match_id, db)
 
-    # Redirect to active tiebreak child if one exists
-    if match.challenge and match.challenge.challenge_kind == ChallengeKindEnum.normal:
+    # Redirect to an active tiebreak child if one exists. This also covers
+    # rematches: they can enter sudden death just like normal challenges.
+    if match.challenge and match.challenge.challenge_kind != ChallengeKindEnum.tiebreak:
         tb_child = get_tiebreak_match(match.id, db)
         if tb_child and tb_child.status != "complete":
             match_id = tb_child.id
@@ -262,6 +263,11 @@ async def submit_score(
     manager.ensure_match_registered(match_id, match.participants)
 
     challenge = match.challenge
+    # The UI represents a tiebreak by its parent match. Keep websocket
+    # notifications on that public id even when scoring is submitted directly
+    # to the 1-arrow child match.
+    notify_match_id = match.parent_match_id or match_id
+    manager.ensure_match_registered(notify_match_id, match.participants)
     if challenge:
         if challenge.discipline.value != "target":
             raise HTTPException(status_code=501, detail=f"Discipline '{challenge.discipline.value}' not yet implemented")
@@ -279,10 +285,10 @@ async def submit_score(
     my_name = get_profile_name(current_user.id, db)
     if opp:
         asyncio.create_task(manager.notify_user(opp.user_id, {
-            "type": "opponent_score_submitted", "match_id": match_id, "opponent_name": my_name,
+            "type": "opponent_score_submitted", "match_id": notify_match_id, "opponent_name": my_name,
         }))
-        asyncio.create_task(manager.notify_match_opponent(match_id, current_user.id, {
-            "type": "opp_score_done", "match_id": match_id,
+        asyncio.create_task(manager.notify_match_opponent(notify_match_id, current_user.id, {
+            "type": "opp_score_done", "match_id": notify_match_id,
         }))
 
     # ── Tiebreak child resolution ─────────────────────────────────────────────
@@ -292,7 +298,8 @@ async def submit_score(
         all_done = all(p.submitted_at is not None for p in human)
         if not all_done:
             return {"status": "submitted", "match_complete": False,
-                    "tiebreak_required": True, "tiebreak_match_id": match_id}
+                    "tiebreak_required": True, "tiebreak_waiting": True,
+                    "both_submitted": False, "tiebreak_match_id": match_id}
 
         if len(human) != 2:
             raise HTTPException(status_code=500, detail="Tiebreak match must have exactly 2 participants")
@@ -310,7 +317,9 @@ async def submit_score(
             parent_match = load_match(match.parent_match_id, db) if match.parent_match_id else match
             notify_tiebreak_started(parent_match, match, db)
             return {"status": "submitted", "match_complete": False,
-                    "tiebreak_required": True, "tiebreak_match_id": match_id}
+                    "tiebreak_required": True, "tiebreak_waiting": False,
+                    "both_submitted": True, "tiebreak_round_tied": True,
+                    "tiebreak_match_id": match_id}
 
         my_p  = p0 if p0.user_id == current_user.id else p1
         opp_p = p1 if p0.user_id == current_user.id else p0
@@ -324,10 +333,11 @@ async def submit_score(
         resolve_parent_from_tiebreak(match, db)
         for p in human:
             asyncio.create_task(manager.notify_user(p.user_id, {
-                "type": "match_complete", "match_id": match_id,
+                "type": "match_complete", "match_id": notify_match_id,
             }))
         return {"status": "submitted", "match_complete": True,
-                "tiebreak_required": False, "tiebreak_match_id": None}
+                "tiebreak_required": False, "tiebreak_waiting": False,
+                "both_submitted": True, "tiebreak_match_id": None}
 
     # ── Normal match resolution ───────────────────────────────────────────────
     human    = [p for p in match.participants if not p.is_bot]
@@ -384,6 +394,7 @@ def get_match_status(
             result=None, my_set_points=0, opp_set_points=0,
             current_set=1, sets=[], first_to_act=None,
             judge_status="Waiting for opponent to join…",
+            tiebreak_match_id=None,
         )
 
     me        = get_participant(match, current_user.id)
@@ -484,6 +495,7 @@ def get_match_status(
         current_set=current_set, sets=sets_out,
         first_to_act=match.first_to_act, judge_status=judge,
         opp_current_set_arrows=opp_current_set_arrows,
+        tiebreak_match_id=tb_match.id if tiebreak_req and tb_match else None,
     )
 
 

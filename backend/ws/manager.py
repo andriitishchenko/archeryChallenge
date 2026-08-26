@@ -11,6 +11,8 @@ Populated when matches are created (via challenges/scores routers).
 Used to find opponents for arrow broadcasting.
 """
 import asyncio
+import json
+import logging
 import uuid
 from collections import defaultdict
 from typing import Dict, List, Optional
@@ -22,6 +24,12 @@ from core.config import settings
 
 # Max queued offline messages per user — prevents unbounded memory growth
 _PENDING_CAP = 50
+log = logging.getLogger("arrowmatch.websocket")
+
+
+def _message_summary(message: dict) -> str:
+    """Serialize a WS payload consistently for diagnostics without tokens."""
+    return json.dumps(message, ensure_ascii=False, sort_keys=True, default=str)
 
 
 class ConnectionManager:
@@ -43,16 +51,18 @@ class ConnectionManager:
     def register_user_socket(self, user_id: str, ws: WebSocket):
         self._user_sockets[user_id] = ws
         pending = self._pending.pop(user_id, [])
+        log.info("WS CONNECT user=%s pending=%d", user_id, len(pending))
         if pending:
-            asyncio.create_task(self._flush_pending(ws, pending))
+            asyncio.create_task(self._flush_pending(user_id, ws, pending))
 
     def unregister_user_socket(self, user_id: str, ws: WebSocket):
         if self._user_sockets.get(user_id) is ws:
             del self._user_sockets[user_id]
+            log.info("WS DISCONNECT user=%s", user_id)
 
-    async def _flush_pending(self, ws: WebSocket, messages: list):
+    async def _flush_pending(self, user_id: str, ws: WebSocket, messages: list):
         for msg in messages:
-            await self.send_personal(ws, msg)
+            await self.send_personal(ws, msg, recipient_id=user_id, queued=True)
 
     # ── Match participant registry ────────────────────────────────────────────
 
@@ -81,11 +91,18 @@ class ConnectionManager:
         """Push a message to a user. Queues if offline (capped at _PENDING_CAP)."""
         ws = self._user_sockets.get(user_id)
         if ws:
-            await self.send_personal(ws, message)
+            await self.send_personal(ws, message, recipient_id=user_id)
         else:
             queue = self._pending[user_id]
             if len(queue) < _PENDING_CAP:
                 queue.append(message)
+                log.info(
+                    "WS QUEUE user=%s pending=%d type=%s match=%s payload=%s",
+                    user_id, len(queue), message.get("type"),
+                    message.get("match_id"), _message_summary(message),
+                )
+            else:
+                log.warning("WS QUEUE_FULL user=%s type=%s", user_id, message.get("type"))
 
     async def notify_users(self, user_ids: List[str], message: dict):
         """Push a message to multiple users."""
@@ -94,9 +111,17 @@ class ConnectionManager:
 
     async def notify_match_opponent(self, match_id: str, sender_id: str, message: dict):
         """Forward a message from sender to their opponent(s) in a match."""
-        for uid in self._match_participants.get(match_id, []):
-            if uid != sender_id:
-                await self.notify_user(uid, message)
+        recipients = [
+            uid for uid in self._match_participants.get(match_id, [])
+            if uid != sender_id
+        ]
+        log.info(
+            "WS ROUTE match=%s sender=%s recipients=%s type=%s payload=%s",
+            match_id, sender_id, recipients, message.get("type"),
+            _message_summary(message),
+        )
+        for uid in recipients:
+            await self.notify_user(uid, message)
 
     async def notify_match_all(self, match_id: str, message: dict):
         """Send a message to all participants in a match."""
@@ -114,11 +139,25 @@ class ConnectionManager:
                             "match_id": match_id,
                         })
 
-    async def send_personal(self, ws: WebSocket, message: dict):
+    async def send_personal(
+        self,
+        ws: WebSocket,
+        message: dict,
+        recipient_id: Optional[str] = None,
+        queued: bool = False,
+    ):
+        log.info(
+            "WS SEND user=%s queued=%s type=%s match=%s payload=%s",
+            recipient_id or "unknown", queued, message.get("type"),
+            message.get("match_id"), _message_summary(message),
+        )
         try:
             await ws.send_json(message)
         except Exception:
-            pass
+            log.exception(
+                "WS SEND_FAILED user=%s type=%s match=%s",
+                recipient_id or "unknown", message.get("type"), message.get("match_id"),
+            )
 
     # ── Challenge feed ────────────────────────────────────────────────────────
 
@@ -129,8 +168,13 @@ class ConnectionManager:
             if uid == exclude_user_id:
                 continue
             try:
+                log.info(
+                    "WS SEND user=%s queued=false type=%s match=%s payload=%s",
+                    uid, event.get("type"), event.get("match_id"), _message_summary(event),
+                )
                 await ws.send_json(event)
             except Exception:
+                log.exception("WS BROADCAST_FAILED user=%s type=%s", uid, event.get("type"))
                 dead.append(uid)
         for uid in dead:
             self._user_sockets.pop(uid, None)
@@ -145,7 +189,10 @@ class ConnectionManager:
             "filters": filters,
             "profile": profile,
         }
-        await self.send_personal(ws, {"type": "mm_status", "message": "Searching for opponent…"})
+        await self.send_personal(
+            ws, {"type": "mm_status", "message": "Searching for opponent…"},
+            recipient_id=user_id,
+        )
 
         matched = await self._try_match(user_id)
         if not matched:
@@ -171,12 +218,12 @@ class ConnectionManager:
                     "type":     "mm_matched",
                     "match_id": match_id,
                     "opponent": _safe_profile(other["profile"]),
-                })
+                }, recipient_id=requester_id)
                 await self.send_personal(other["ws"], {
                     "type":     "mm_matched",
                     "match_id": match_id,
                     "opponent": _safe_profile(requester["profile"]),
-                })
+                }, recipient_id=other_id)
                 self.leave_matchmaking(requester_id)
                 self.leave_matchmaking(other_id)
                 return True
@@ -197,7 +244,7 @@ class ConnectionManager:
             "type":     "mm_matched",
             "match_id": match_id,
             "opponent": _safe_profile(bot),
-        })
+        }, recipient_id=user_id)
         self.leave_matchmaking(user_id)
 
 

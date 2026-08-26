@@ -72,6 +72,20 @@ async function checkTotalComplete() {
   if (!result) { ms._totalSubmitting = false; _setNumpadDisabled(false); return; }
 
   if (result.scoring === 'tiebreak' || result.tiebreak_required) {
+    if (result.tiebreak_waiting) {
+      // The other player has not submitted this round yet. Keep the arrow
+      // visible and lock the input instead of treating the response as a
+      // tied round that needs another arrow immediately.
+      ms._totalSubmitting   = false;
+      ms._tiebreakSubmitted = true;
+      ms._tiebreakRequired  = true;
+      ms._tiebreakMatchId   = result.tiebreak_match_id || ms._tiebreakMatchId;
+      ms._totalMyScore      = myScore;
+      saveMatchState();
+      _setStatus(`Score submitted — waiting for ${escHtml(ms.oppName)}…`);
+      return;
+    }
+
     // Main score tied — tiebreak match created. Player has NOT yet shot tiebreak arrow.
     ms._totalSubmitting   = false;
     ms._tiebreakRequired  = true;

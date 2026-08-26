@@ -18,7 +18,15 @@
 // ── EventBus: match lifecycle ─────────────────────────────────────────────────
 
 EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }) => {
-  if (background) return;
+  // On a page reload, wait for the authoritative status response before
+  // rendering. The dashboard can briefly contain stale pre-tiebreak data.
+  if (background || restored) {
+    if (restored) {
+      _setNumpadDisabled(true);
+      _setStatus('Restoring match…');
+    }
+    return;
+  }
   renderMatchScene();  // renderMatchScene already restores arrowValues from matchState
   _resetRematchUI();
 });
@@ -428,7 +436,14 @@ async function _submitScoreToServer(arrows) {
   if (clean.length === 0) { _setNumpadDisabled(false); return null; }
 
   try {
-    return await api('POST', `/api/matches/${ms.id}/score`, { arrows: clean });
+    // The parent match keeps the original arrow count (for example, 6),
+    // while every sudden-death round belongs to the 1-arrow child match.
+    // Submit directly to that child so a repeated tiebreak round cannot be
+    // validated as a normal 6-arrow score.
+    const targetMatchId = ms._tiebreakRequired && ms._tiebreakMatchId
+      ? ms._tiebreakMatchId
+      : ms.id;
+    return await api('POST', `/api/matches/${targetMatchId}/score`, { arrows: clean });
   } catch (e) {
     if (e?.status === 404) {
       _setNumpadDisabled(true);
