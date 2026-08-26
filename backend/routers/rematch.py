@@ -18,7 +18,12 @@ from models.models import (
     MatchTypeEnum, Profile, User,
 )
 from schemas.matches import RematchOut
-from services.match import get_opponent, get_participant, load_match
+from services.match import (
+    ensure_active_match_capacity,
+    get_opponent,
+    get_participant,
+    load_match,
+)
 from ws.manager import manager
 
 router = APIRouter(prefix="/api/matches", tags=["rematch"])
@@ -125,6 +130,8 @@ async def propose_rematch(
     if not ch:
         raise HTTPException(status_code=400, detail="Cannot rematch — original challenge config missing")
 
+    ensure_active_match_capacity([current_user.id, opp.user_id], db)
+
     new_ch_id = str(uuid.uuid4())
     db.add(Challenge(
         id             = new_ch_id,
@@ -188,6 +195,11 @@ async def accept_rematch(
         raise HTTPException(status_code=400, detail="No opponent in rematch")
 
     proposer_id  = opp.user_id
+    ensure_active_match_capacity(
+        [current_user.id, proposer_id],
+        db,
+        exclude_match_id=match.id,
+    )
     match.status = "active"
     ch.is_active = False
     db.commit()

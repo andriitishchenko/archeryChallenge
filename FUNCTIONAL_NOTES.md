@@ -2,7 +2,7 @@
 
 This is a compact behavior ledger for implemented functionality. It protects existing requirements from being removed accidentally. It is not a roadmap; planned behavior belongs in `app_spec.txt`.
 
-## Status snapshot — 2026-08-26
+## Status snapshot — 2026-08-27
 
 | Area | Status | Current evidence or gap |
 | --- | --- | --- |
@@ -11,6 +11,7 @@ This is a compact behavior ledger for implemented functionality. It protects exi
 | Total/set scoring, tiebreak, forfeit | Implemented | Server scoring and state transitions exist. |
 | WebSocket events and matchmaking | Implemented | Single-user socket, human matching, single-shot bot fallback, offline queue, and bot-mode signalling exist. |
 | Rematch flow | Implemented | Propose, accept, decline, and original-ID recovery exist. |
+| Active match limit | Implemented | Server rejects creation/activation when either participant already has 10 open parent matches; tiebreak children do not consume another slot. |
 | History, ranking, achievements | Implemented | Server endpoints calculate cumulative rating/stats; the history screen renders the server summary. |
 | Expiry and inactivity handling | Implemented | Background worker handles deadlines and stale matches. |
 | Scheduled-match start semantics | Partial | Deadline validation exists, but joining starts the match immediately. |
@@ -51,6 +52,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Public challenge list → returns active public challenges and excludes the current user's own challenges → profile, bow, distance, and country filters are applied.
 - Create a public challenge → persists it and broadcasts `new_challenge` → connected users can refresh the list without polling for creation.
 - Join a challenge → creates an active match with both participants, deactivates the challenge, and notifies the creator with `opponent_joined` → a user cannot join their own or expired challenge.
+- Join a challenge or propose/accept a rematch → the server counts each participant's unfinished parent matches → the operation returns HTTP 409 at 10 open matches per user; an automatic tiebreak child does not consume an additional slot.
 - Delete a challenge → removes it from the public feed and broadcasts `challenge_removed` → an in-progress match prevents deletion until it is forfeited.
 - Scheduled challenge deadline passes with no active match → expiry worker deactivates it and sends `challenge_expired` → private/public notification behavior remains distinct.
 

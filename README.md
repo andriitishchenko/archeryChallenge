@@ -111,9 +111,9 @@ All protected HTTP requests use `Authorization: Bearer <access_token>`.
 | --- | --- |
 | Auth | `POST /api/guest`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `GET /api/auth/me` |
 | Profile | `GET/PUT /api/profile`, `GET /api/profile/{user_id}` |
-| Challenges | `GET/POST /api/challenges`, `GET /api/challenges/mine`, `GET /api/challenges/{id}`, `DELETE /api/challenges/{id}`, `POST /api/challenges/{id}/join` |
+| Challenges | `GET/POST /api/challenges`, `GET /api/challenges/mine`, `GET /api/challenges/{id}`, `DELETE /api/challenges/{id}`, `POST /api/challenges/{id}/join` (HTTP 409 when a participant has 10 open matches) |
 | Matches | `GET /api/matches/mine/active`, `GET /api/matches/{id}`, `GET /api/matches/{id}/status`, `POST /api/matches/{id}/set`, `POST /api/matches/{id}/score`, `POST /api/matches/{id}/forfeit` |
-| Rematch | `POST /api/matches/{id}/rematch`, `/rematch/accept`, `/rematch/decline`, `/rematch/cancel` |
+| Rematch | `POST /api/matches/{id}/rematch`, `/rematch/accept`, `/rematch/decline`, `/rematch/cancel` (HTTP 409 at the 10 open-match limit) |
 | Stats | `GET /api/history`, `GET /api/ranking`, `GET /api/ranking/me`, `GET /api/achievements`, `GET /api/my-challenges` |
 
 The complete request/response contract is defined by the Pydantic schemas in `backend/schemas/` and exposed through `/docs` in debug mode. Update schemas, routers, and this table together when an API contract changes.

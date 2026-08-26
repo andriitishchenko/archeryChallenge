@@ -23,6 +23,7 @@ from models.models import (
 )
 from schemas.challenges import ChallengeCreate, ChallengeOut, JoinResponse
 from services.challenges import challenge_to_out
+from services.match import ensure_active_match_capacity
 from ws.manager import manager
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
@@ -222,6 +223,8 @@ async def join_challenge(
         ch.is_active = False
         db.commit()
         raise HTTPException(status_code=400, detail="Challenge deadline has passed")
+
+    ensure_active_match_capacity([ch.creator_id, current_user.id], db)
 
     match_id = str(uuid.uuid4())
     db.add(Match(

@@ -14,8 +14,45 @@ from models.models import (
 )
 from schemas.matches import MatchOut, MatchParticipantOut
 
+MAX_ACTIVE_MATCHES_PER_USER = 10
+
 
 # ── Basic loaders ─────────────────────────────────────────────────────────────
+
+def ensure_active_match_capacity(
+    user_ids: list[str],
+    db: Session,
+    *,
+    exclude_match_id: Optional[str] = None,
+) -> None:
+    """Reject a new/activated match when a participant already has ten open matches.
+
+    A waiting rematch occupies a slot just like an active match. Tiebreak child
+    matches are excluded because their parent match already occupies the slot.
+    """
+    checked_user_ids = set(user_ids)
+    for user_id in checked_user_ids:
+        query = (
+            db.query(func.count(func.distinct(Match.id)))
+            .join(MatchParticipant, MatchParticipant.match_id == Match.id)
+            .filter(
+                MatchParticipant.user_id == user_id,
+                Match.status != "complete",
+                Match.parent_match_id.is_(None),
+            )
+        )
+        if exclude_match_id:
+            query = query.filter(Match.id != exclude_match_id)
+
+        open_match_count = query.scalar() or 0
+        if open_match_count >= MAX_ACTIVE_MATCHES_PER_USER:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Active match limit reached: maximum "
+                    f"{MAX_ACTIVE_MATCHES_PER_USER} matches per user"
+                ),
+            )
 
 def load_match(match_id: str, db: Session) -> Match:
     """Load a Match with participants and challenge eagerly. Raises 404 if missing."""
