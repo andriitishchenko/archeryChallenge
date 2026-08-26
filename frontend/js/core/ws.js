@@ -184,7 +184,8 @@ const WS = (() => {
 
       case 'mm_matched':
         EventBus.emit(EVENT_TYPES.WS_MM_MATCHED, {
-          match_id: msg.match_id, opponent: msg.opponent });
+          match_id: msg.match_id, opponent: msg.opponent,
+          is_bot: msg.is_bot === true });
         break;
 
       case 'mm_cancelled':

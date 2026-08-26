@@ -9,7 +9,7 @@ This is a compact behavior ledger for implemented functionality. It protects exi
 | Auth, guest mode, JWT, profile | Implemented | Routes and persistence exist; guest flow smoke-tested. |
 | Public/private challenges and filters | Implemented | Create, list, join, delete, invite-link, and notifications exist. |
 | Total/set scoring, tiebreak, forfeit | Implemented | Server scoring and state transitions exist. |
-| WebSocket events and matchmaking | Implemented | Single-user socket, human matching, offline queue, and bot fallback exist. |
+| WebSocket events and matchmaking | Implemented | Single-user socket, human matching, single-shot bot fallback, offline queue, and bot-mode signalling exist. |
 | Rematch flow | Implemented | Propose, accept, decline, and original-ID recovery exist. |
 | History, ranking, achievements | Implemented | Server endpoints calculate cumulative rating/stats; the history screen renders the server summary. |
 | Expiry and inactivity handling | Implemented | Background worker handles deadlines and stale matches. |
@@ -79,7 +79,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 
 ### Matchmaking and rematch
 
-- Matchmaking request → searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, a bot opponent is generated.
+- Matchmaking request → replaces any previous request for the same user and searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, one bot fallback event is emitted with `is_bot=true` and the client starts a non-persisted bot match.
 - Offline notification → queues up to 50 messages per user → queued messages flush when that user reconnects.
 - Rematch proposal → creates a private waiting rematch match and notifies the opponent with the original match ID → duplicate proposals are rejected and the client can associate the request with the correct completed match.
 - Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event, the accepted foreground rematch opens on the challenge screen, and the declined match is removed.

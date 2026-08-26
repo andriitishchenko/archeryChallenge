@@ -46,6 +46,9 @@ class ConnectionManager:
         # Matchmaking queue: user_id → {ws, filters, profile}
         self._mm_queue: Dict[str, dict] = {}
 
+        # At most one delayed bot fallback may exist for a queued user.
+        self._mm_bot_tasks: Dict[str, asyncio.Task] = {}
+
     # ── User socket registration ──────────────────────────────────────────────
 
     def register_user_socket(self, user_id: str, ws: WebSocket):
@@ -184,6 +187,9 @@ class ConnectionManager:
     async def join_matchmaking(
         self, ws: WebSocket, user_id: str, filters: dict, profile: dict
     ):
+        # A reconnect or repeated Find click must replace the previous
+        # request instead of leaving multiple delayed bot tasks behind.
+        self.leave_matchmaking(user_id)
         self._mm_queue[user_id] = {
             "ws":      ws,
             "filters": filters,
@@ -196,10 +202,19 @@ class ConnectionManager:
 
         matched = await self._try_match(user_id)
         if not matched:
-            asyncio.create_task(self._bot_spawn_task(user_id, profile))
+            self._mm_bot_tasks[user_id] = asyncio.create_task(
+                self._bot_spawn_task(user_id, profile)
+            )
 
     def leave_matchmaking(self, user_id: str):
         self._mm_queue.pop(user_id, None)
+        task = self._mm_bot_tasks.pop(user_id, None)
+        try:
+            current_task = asyncio.current_task()
+        except RuntimeError:
+            current_task = None
+        if task and task is not current_task and not task.done():
+            task.cancel()
 
     async def _try_match(self, requester_id: str) -> bool:
         requester = self._mm_queue.get(requester_id)
@@ -230,22 +245,37 @@ class ConnectionManager:
         return False
 
     async def _bot_spawn_task(self, user_id: str, user_profile: dict):
-        await asyncio.sleep(settings.BOT_WAIT_SECONDS)
-        if user_id not in self._mm_queue:
+        try:
+            await asyncio.sleep(settings.BOT_WAIT_SECONDS)
+
+            # Claim the request before the first await. This makes the
+            # fallback single-shot even if duplicate tasks were scheduled by
+            # older clients or concurrent reconnect messages.
+            task = asyncio.current_task()
+            if (
+                user_id not in self._mm_queue
+                or self._mm_bot_tasks.get(user_id) is not task
+            ):
+                return
+            ws = self._user_sockets.get(user_id)
+            if not ws:
+                self.leave_matchmaking(user_id)
+                return
+            self._mm_queue.pop(user_id, None)
+            self._mm_bot_tasks.pop(user_id, None)
+
+            skill    = user_profile.get("skill_level", "Skilled")
+            bow      = user_profile.get("bow_type", "Recurve")
+            bot      = generate_bot_profile(skill, bow)
+            match_id = str(uuid.uuid4())
+            await self.send_personal(ws, {
+                "type":     "mm_matched",
+                "match_id": match_id,
+                "is_bot":   True,
+                "opponent": _safe_profile(bot),
+            }, recipient_id=user_id)
+        except asyncio.CancelledError:
             return
-        ws = self._user_sockets.get(user_id)
-        if not ws:
-            return
-        skill    = user_profile.get("skill_level", "Skilled")
-        bow      = user_profile.get("bow_type", "Recurve")
-        bot      = generate_bot_profile(skill, bow)
-        match_id = str(uuid.uuid4())
-        await self.send_personal(ws, {
-            "type":     "mm_matched",
-            "match_id": match_id,
-            "opponent": _safe_profile(bot),
-        }, recipient_id=user_id)
-        self.leave_matchmaking(user_id)
 
 
 # Module-level singleton

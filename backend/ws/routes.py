@@ -61,6 +61,9 @@ async def ws_user(
       arrow      {match_id, arrow_index, value} — stream live arrow to opponent; null clears a preview, arrows may carry the full snapshot
       mm_find    {filters, profile}             — join matchmaking queue
       mm_cancel                                 — leave matchmaking queue
+
+    The mm_matched event includes is_bot=true when it starts the local,
+    non-persisted bot simulation.
     """
     user_id = await _auth_and_accept(websocket, token)
     if not user_id:

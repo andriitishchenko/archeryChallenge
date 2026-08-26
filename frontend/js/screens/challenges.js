@@ -32,12 +32,18 @@ EventBus.on(EVENT_TYPES.APP_SCENE_CHANGE, ({ scene }) => {
 
 // ── Matchmaking ───────────────────────────────────────────────────────────────
 
+let _matchmakingPending = false;
+
 EventBus.on(EVENT_TYPES.WS_MM_STATUS, ({ message }) => {
   const statusEl = document.getElementById('find-status');
   if (statusEl) statusEl.innerHTML = `<span class="spinner"></span> ${escHtml(message)}`;
 });
 
-EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent }) => {
+EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent, is_bot }) => {
+  // Ignore late duplicate responses after this request already produced a
+  // match or switched to the local fallback.
+  if (!_matchmakingPending) return;
+  _matchmakingPending = false;
   const statusEl = document.getElementById('find-status');
   const btn      = document.querySelector('.find-btn');
   if (statusEl) statusEl.textContent = '';
@@ -49,18 +55,22 @@ EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent }) => {
     distance:   STATE.profile?.preferredDist || '30m',
     scoring:    'total',
     arrowCount: STATE.arrowCount,
+    skill_level: opponent?.skill_level,
+    isBot:      is_bot === true,
   });
 });
 
 EventBus.on(EVENT_TYPES.WS_MM_CANCELLED, () => {
-  const btn = document.querySelector('.find-btn');
-  if (btn?.disabled) _fallbackFindOpponent();
+  if (_matchmakingPending && document.querySelector('.find-btn')?.disabled) {
+    _fallbackFindOpponent();
+  }
 });
 
 // ── Quick Find ────────────────────────────────────────────────────────────────
 
 function findOpponent() {
   if (!STATE.profile) { showToast('Complete your profile first', 'error'); showScene('settings'); return; }
+  _matchmakingPending = true;
   const btn = document.querySelector('.find-btn');
   btn.disabled    = true;
   btn.textContent = 'Searching…';
@@ -74,11 +84,14 @@ function findOpponent() {
     country:     STATE.profile.country,
   });
   setTimeout(() => {
-    if (document.querySelector('.find-btn')?.disabled) _fallbackFindOpponent();
+    if (_matchmakingPending && document.querySelector('.find-btn')?.disabled) {
+      _fallbackFindOpponent();
+    }
   }, 15000);
 }
 
 function _fallbackFindOpponent() {
+  _matchmakingPending = false;
   disconnectMatchmaking();
   const statusEl = document.getElementById('find-status');
   const btn      = document.querySelector('.find-btn');

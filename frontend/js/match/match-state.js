@@ -30,6 +30,7 @@ function startMatch(challenge, isCreator = false) {
     challengeId:   challenge.id,
     myName, oppName, scoring, arrowCount, dist,
     isBot:         challenge.isBot || false,
+    oppSkill:      challenge.skill_level || challenge.oppSkill || null,
     arrowValues:   [],
     setMyScore:    0, setOppScore: 0, currentSet: 1, setArrowValues: [],
     complete:      false, isCreator,

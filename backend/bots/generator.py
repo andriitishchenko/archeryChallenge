@@ -1,7 +1,8 @@
 """
 Bot score generation.
 Bots simulate real users: scores are calibrated to ±10% of the user's average.
-The bot flag is NEVER sent to the client — users should believe they're playing a real opponent.
+The matchmaking event marks a bot explicitly because this fallback is a local
+simulation and does not create a persisted server match.
 """
 import random
 from typing import List, Optional
