@@ -565,7 +565,8 @@ function _oppIndicatorHide() {
 
 // Total mode: "Brave: [10, 10, 10]: 30" — static until the match changes.
 function _showOpponentArrowIndicator(oppName, arrows) {
-  const count = STATE.matchState?.arrowCount || arrows.length;
+  const ms = STATE.matchState;
+  const count = ms?._tiebreakRequired ? 1 : (ms?.arrowCount || arrows.length);
   const slots = Array.from({ length: count }, (_, i) =>
     arrows[i] != null ? arrows[i] : '–'
   );

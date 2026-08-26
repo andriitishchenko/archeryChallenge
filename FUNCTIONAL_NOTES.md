@@ -59,6 +59,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - WebSocket connect, receive, route, send, queue, failure, and close → logger `arrowmatch.websocket` records the user, message type, match ID, recipients, and payload → server logs show whether a message arrived, was routed, sent, queued offline, or failed.
 - Browser API or WebSocket send → the browser console records the method/channel, target, payload, and send/skip status → authentication tokens, passwords, and secrets are redacted from diagnostics.
 - Live arrow input or WebSocket reconnect → client sends the current full arrow snapshot with the changed arrow and replays it after reconnect → the opponent's preview recovers missing arrows instead of retaining a sparse series.
+- Total-score sudden death live preview → uses the one-arrow tiebreak size instead of the parent match arrow count → the opponent sees `[10]: 10`, not the original multi-arrow slots.
 - Final arrow entered → client waits 600 ms before automatic submission and keeps DEL enabled → the player can correct the last input before the score is sent.
 - Double-tap on an entered arrow or press DEL → client clears that arrow, restores it as the active input, and sends a null live-preview update → the value is removed locally and is not submitted while the correction window is active.
 - Total-score submission → stores the player's arrow values and waits for the opponent → the server resolves win/loss when both scores exist.
