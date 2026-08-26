@@ -133,12 +133,15 @@ async function _refreshMatchScene() {
     if (!status) {
       // Keep the locally restored stage visible if the status request is
       // temporarily unavailable.
-      renderMatchScene();
+      if (STATE.currentMatchId === ms.id) renderMatchScene();
       return;
     }
     // Ignore an older restore response when a scoring event already started
     // a newer authoritative status refresh for this match.
-    if (ms._statusRequestSeq !== statusRequestSeq) return;
+    // Also ignore a response for a match that is no longer displayed. Without
+    // this guard, a late response from a previous parallel match can repaint
+    // the shared opponent-results element in the newly selected match.
+    if (ms._statusRequestSeq !== statusRequestSeq || STATE.currentMatchId !== ms.id) return;
 
     if (status.status === 'waiting') {
       _setNumpadDisabled(true);
@@ -252,7 +255,7 @@ async function _refreshMatchScene() {
       }
     }
   } catch (e) {
-    if (e?.status === 404) {
+    if (e?.status === 404 && STATE.currentMatchId === ms.id) {
       const mid = STATE.currentMatchId;
       if (mid) _removeActiveMatch(mid);
       const remaining = Object.keys(STATE.activeMatches);

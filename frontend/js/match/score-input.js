@@ -40,6 +40,9 @@ EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
   _oppIndicatorHide();
   arrowValues = [...(matchState.arrowValues || [])];
   renderMatchScene();
+  if (matchState.scoring === 'total' && matchState._oppTotalArrows?.length) {
+    _showOpponentArrowIndicator(matchState.oppName, matchState._oppTotalArrows);
+  }
 });
 
 EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value }) => {
@@ -48,7 +51,11 @@ EventBus.on(EVENT_TYPES.WS_OPP_ARROW, ({ matchId, arrow_index, value }) => {
   if (!ms) return;
 
   if (ms.scoring === 'total') {
-    _showOpponentArrowIndicator(ms.oppName, arrow_index, value);
+    const arrows = ms._oppTotalArrows || [];
+    arrows[arrow_index] = value;
+    ms._oppTotalArrows = arrows;
+    saveMatchState();
+    _showOpponentArrowIndicator(ms.oppName, arrows);
   } else if (ms.scoring === 'sets') {
     // arrow_index is the position within the current set (0, 1, 2)
     const setArrows = ms._oppSetArrows || [];
@@ -503,9 +510,16 @@ function _oppIndicatorHide() {
   el.textContent = '';
 }
 
-// Total mode: "Brave: arrow 2 → 9" — static, stays until next arrow or scene change
-function _showOpponentArrowIndicator(oppName, arrowIndex, value) {
-  _oppIndicatorShow(`${oppName}: arrow ${arrowIndex + 1} → ${value}`);
+// Total mode: "Brave: [10, 10, 10]: 30" — static until the match changes.
+function _showOpponentArrowIndicator(oppName, arrows) {
+  const count = STATE.matchState?.arrowCount || arrows.length;
+  const slots = Array.from({ length: count }, (_, i) =>
+    arrows[i] != null ? arrows[i] : '–'
+  );
+  const total = arrows
+    .filter(v => v != null)
+    .reduce((sum, value) => sum + value, 0);
+  _oppIndicatorShow(`${oppName}: [${slots.join(', ')}]: ${total}`);
 }
 
 // Sets mode post-resolve summary: "Brave: 10 9 10 = 29 pts"
