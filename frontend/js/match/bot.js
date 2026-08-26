@@ -18,6 +18,15 @@ const BOT_RESULT_COEFFICIENT = {
   Master:    0.55,
 };
 
+// The shadow bot should feel like a separate player, not a copy of the live
+// input. Keep the spread skill-sensitive, but wide enough that every skill
+// level can produce both noticeably better and worse arrows than the player.
+const BOT_RESULT_SPREAD = {
+  Beginner: 2.6,
+  Skilled:   2.2,
+  Master:    1.6,
+};
+
 function genBotArrow(skill) {
   const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);
@@ -41,13 +50,14 @@ function _botClamp(value, min = 0, max = 10) {
   return Math.max(min, Math.min(max, value));
 }
 
-function _botRandomInt(min, max) {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
 function _botResultCoefficient(ms) {
   return BOT_RESULT_COEFFICIENT[ms?.oppSkill || 'Skilled']
     ?? BOT_RESULT_COEFFICIENT.Skilled;
+}
+
+function _botResultSpread(ms) {
+  return BOT_RESULT_SPREAD[ms?.oppSkill || 'Skilled']
+    ?? BOT_RESULT_SPREAD.Skilled;
 }
 
 function _botAveragePerArrow() {
@@ -133,15 +143,15 @@ function botShadowShoot(ms, index, userValue, count) {
     const enteredMean = entered.length
       ? entered.reduce((sum, value) => sum + value, 0) / entered.length
       : null;
-    // Mirror the live series immediately. This is deliberately driven by the
-    // current input, not only by old history, so a run of 10s is visible as a
-    // run near 10s on the opponent side before submission.
+    // Use the live input as one reference, but keep the bot's own form in the
+    // mix. A wider signed spread makes the preview capable of landing above
+    // or below the player's arrow instead of mirroring it almost exactly.
     const lastPlayerValue = _botLastPlayerValue(state);
     const coefficient = _botResultCoefficient(ms);
     const reference = lastPlayerValue === null
-      ? (enteredMean === null ? state.mean : enteredMean)
-      : lastPlayerValue + coefficient;
-    const jitter = (Math.random() * 2 - 1) * 0.6;
+      ? (enteredMean === null ? state.mean : enteredMean) + coefficient
+      : lastPlayerValue * 0.65 + state.mean * 0.35 + coefficient;
+    const jitter = (Math.random() * 2 - 1) * _botResultSpread(ms);
     state.arrows[index] = Math.round(_botClamp(
       reference + jitter,
     ));
@@ -179,15 +189,15 @@ function botShadowFinalize(ms, userTotal, count) {
   const maximum = count * 10;
   const playerMean = Number.isFinite(userTotal) && count > 0 ? userTotal / count : state.mean;
   const coefficient = _botResultCoefficient(ms);
-  const baseline = playerMean * count + coefficient * count;
-  let target = Math.round(baseline + (Math.random() * 2 - 1) * Math.max(1, count * 0.12));
-
-  // The bot has a small coefficient-based edge more often than not, while
-  // some rounds still give the player the advantage for a natural result.
-  const outcome = Math.random();
-  const margin = _botRandomInt(1, Math.max(1, Math.round(count * 0.2)));
-  if (outcome < 0.35) target = userTotal + margin;
-  else if (outcome < 0.55) target = userTotal - margin;
+  const profile = BOT_SKILL[ms.oppSkill || 'Skilled'] || BOT_SKILL.Skilled;
+  // Keep the bot broadly calibrated to the player's form and skill edge, but
+  // use a symmetric total swing so the final result can move either way.
+  const baselinePerArrow = playerMean
+    + coefficient
+    + (profile.mean - playerMean) * 0.15;
+  const baseline = baselinePerArrow * count;
+  const totalSpread = Math.max(3, count * _botResultSpread(ms) * 0.35);
+  let target = Math.round(baseline + (Math.random() * 2 - 1) * totalSpread);
   target = Math.round(_botClamp(target, 0, maximum));
 
   state.arrows = _botMoveToTarget(arrows, target);
