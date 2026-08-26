@@ -80,6 +80,49 @@ def _set_tiebreak_active(match: Match, db: Session) -> bool:
     )
 
 
+def _reconcile_ready_set_tiebreak(
+    match: Match,
+    me: MatchParticipant,
+    opp: Optional[MatchParticipant],
+    db: Session,
+) -> None:
+    """Resolve a sudden-death pair left ready by concurrent submissions.
+
+    SQLite can let two near-simultaneous requests observe no opponent row and
+    both return ``both_submitted=False``. Status recovery must not leave those
+    two persisted arrows as an active, permanently locked round.
+    """
+    if not opp or match.status == "complete" or not _set_tiebreak_active(match, db):
+        return
+
+    rows = {
+        participant.id: db.query(ArrowScore).filter(
+            ArrowScore.participant_id == participant.id,
+            ArrowScore.set_number == 0,
+        ).order_by(ArrowScore.arrow_index).all()
+        for participant in (me, opp)
+    }
+    if not rows[me.id] or not rows[opp.id]:
+        return
+
+    my_total = sum(row.value for row in rows[me.id])
+    opp_total = sum(row.value for row in rows[opp.id])
+    if my_total == opp_total:
+        db.query(ArrowScore).filter(
+            ArrowScore.participant_id.in_([me.id, opp.id]),
+            ArrowScore.set_number == 0,
+        ).delete(synchronize_session=False)
+        db.commit()
+        return
+
+    me.result = MatchResultEnum.win if my_total > opp_total else MatchResultEnum.loss
+    opp.result = MatchResultEnum.loss if my_total > opp_total else MatchResultEnum.win
+    me.final_score = opp.final_score = 6
+    match.status = "complete"
+    match.completed_at = datetime.utcnow()
+    db.commit()
+
+
 # ── Set-system ────────────────────────────────────────────────────────────────
 
 @router.post("/matches/{match_id}/set", response_model=SetResult)
@@ -567,6 +610,9 @@ def get_match_status(
     opp       = get_opponent(match, current_user.id)
     challenge = match.challenge
     scoring   = challenge.scoring.value if challenge else "total"
+    if scoring == "sets":
+        _reconcile_ready_set_tiebreak(match, me, opp, db)
+        db.refresh(match)
     result    = me.result.value if me.result != MatchResultEnum.pending else None
 
     tb_match     = get_tiebreak_match(match.id, db)

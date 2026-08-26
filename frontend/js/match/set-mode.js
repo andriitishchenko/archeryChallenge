@@ -6,6 +6,22 @@
 //             match/match-state.js, match/score-input.js, match/bot.js
 // =============================================
 
+const _setTiebreakPollTimers = {};
+
+function _scheduleSetTiebreakRecovery(matchId, attempt = 0) {
+  if (_setTiebreakPollTimers[matchId]) return;
+  _setTiebreakPollTimers[matchId] = setTimeout(async () => {
+    delete _setTiebreakPollTimers[matchId];
+    const ms = STATE.activeMatches[matchId];
+    if (!ms || ms.complete || !ms._pendingTiebreak || attempt >= 60) return;
+    await _fetchAndResolveMatch(matchId);
+    const current = STATE.activeMatches[matchId];
+    if (current && !current.complete && current._pendingTiebreak) {
+      _scheduleSetTiebreakRecovery(matchId, attempt + 1);
+    }
+  }, 1000);
+}
+
 // Opponent finished their set — update the waiting state without resubmitting.
 EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId, set_number, set_total }) => {
   const ms       = STATE.activeMatches[matchId];
@@ -103,6 +119,7 @@ EventBus.on(EVENT_TYPES.WS_OPP_TIEBREAK_DONE, ({ matchId }) => {
       _setNumpadDisabled(true);
       _setStatus(`Tiebreak: both arrows received — calculating result…`);
     }
+    _scheduleSetTiebreakRecovery(matchId);
     return;
   }
   if (isActive) {
@@ -327,6 +344,7 @@ async function resolveTiebreak() {
       _setStatus(`Tiebreak: waiting for ${ms.oppName}…`);
       ms._pendingTiebreak = true;
       ms._tiebreakSubmitting = false;
+      _scheduleSetTiebreakRecovery(ms.id);
       return;
     }
     if (result.tiebreak_required) {
