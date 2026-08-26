@@ -332,6 +332,8 @@ async function resolveTiebreak() {
       ms.setMyScore  + (myWins  ? 2 : 0),
       ms.setOppScore + (!myWins ? 2 : 0),
       ms.id,
+      myWins ? 'me' : 'opponent',
+      { my: myArrow, opp: botArrow },
     );
     return;
   }
@@ -357,7 +359,11 @@ async function resolveTiebreak() {
     }
     _setStatus('');
     ms._tiebreakSubmitting = false;
-    completeMatch(result.my_set_points, result.opp_set_points, ms.id, result.match_result ?? null);
+    completeMatch(
+      result.my_set_points, result.opp_set_points, ms.id,
+      result.match_result ?? null,
+      { my: result.my_set_total, opp: result.opp_set_total },
+    );
   } catch (e) {
     if (e?.status === 404) {
       _setNumpadDisabled(true);

@@ -65,18 +65,22 @@ EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, 
     else                         { icon = '🤝'; title = "It's a Draw!"; }
   }
 
-  let resultLine;
-  if (matchState.scoring === 'sets') {
-    resultLine = `Set points: ${myScore}–${oppScore}`;
-  } else if (tiebreakArrows) {
-    resultLine = `Score: ${myScore} vs ${oppScore} · Tiebreak: ${tiebreakArrows.my} vs ${tiebreakArrows.opp}`;
-  } else {
-    resultLine = `Score: ${myScore} vs ${oppScore}`;
+  const resultEl = document.getElementById('complete-result');
+  resultEl.replaceChildren();
+  const resultLine = document.createElement('div');
+  resultLine.textContent = matchState.scoring === 'sets'
+    ? `Set points: ${myScore}–${oppScore}`
+    : `Score: ${myScore} vs ${oppScore}`;
+  resultEl.appendChild(resultLine);
+
+  if (tiebreakArrows?.my != null && tiebreakArrows?.opp != null) {
+    const tiebreakLine = document.createElement('div');
+    tiebreakLine.textContent = `Sudden death: ${tiebreakArrows.my}–${tiebreakArrows.opp}`;
+    resultEl.appendChild(tiebreakLine);
   }
 
   document.getElementById('complete-icon').textContent   = icon;
   document.getElementById('complete-title').textContent  = title;
-  document.getElementById('complete-result').textContent = resultLine;
   document.getElementById('match-complete').classList.remove('hidden');
   _setNumpadDisabled(false);
   _setStatus('');
