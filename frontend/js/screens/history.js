@@ -13,8 +13,8 @@ function saveToHistory(ms) {
     scoring:  ms.scoring,
     myScore:  ms.myFinalScore  || 0,
     oppScore: ms.oppFinalScore || 0,
-    result:   (ms.myFinalScore || 0) > (ms.oppFinalScore || 0) ? 'win'
-            : (ms.myFinalScore || 0) < (ms.oppFinalScore || 0) ? 'loss' : 'draw',
+    result:   ms.result || ((ms.myFinalScore || 0) > (ms.oppFinalScore || 0) ? 'win'
+            : (ms.myFinalScore || 0) < (ms.oppFinalScore || 0) ? 'loss' : 'draw'),
     date:     new Date().toISOString(),
   };
   STATE.history.unshift(entry);

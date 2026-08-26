@@ -77,9 +77,14 @@ async function checkTotalComplete() {
       else                      _doBotTiebreak(myScore);
     } else if (ms._tiebreakRequired) {
       const baseScore = ms._botTiebreakBaseScore || 0;
-      const myFinal = baseScore + (myScore > botScore ? 1 : 0);
-      const oppFinal = baseScore + (botScore > myScore ? 1 : 0);
-      completeMatch(myFinal, oppFinal, ms.id);
+      const winner = myScore > botScore ? 'me' : 'opponent';
+      completeMatch(
+        baseScore,
+        baseScore,
+        ms.id,
+        winner,
+        { my: myScore, opp: botScore },
+      );
     } else {
       completeMatch(myScore, botScore, ms.id);
     }
