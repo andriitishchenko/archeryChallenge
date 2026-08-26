@@ -32,13 +32,20 @@ EventBus.on(EVENT_TYPES.WS_OPP_SCORE_SUBMITTED, ({ matchId, opponent_name }) => 
 EventBus.on(EVENT_TYPES.WS_TIEBREAK_STARTED, ({ matchId: tbMatchId, parentMatchId }) => {
   const matchId = parentMatchId || tbMatchId;
   const ms = STATE.activeMatches[matchId];
-  if (!ms || STATE.currentMatchId !== matchId) return;
+  if (!ms) return;
 
   ms._totalSubmitting   = false;
   ms._oppSubmitNotified = false;
   ms._tiebreakRequired  = true;
   ms._tiebreakSubmitted = false;
   ms._tiebreakMatchId   = tbMatchId;
+
+  if (STATE.currentMatchId !== matchId) {
+    saveMatchState();
+    showToast(`${escHtml(ms.oppName || 'Opponent')} — sudden death started.`, 'info');
+    return;
+  }
+
   arrowValues           = [null];
   activeArrowIndex      = 0;
 
@@ -80,7 +87,6 @@ async function checkTotalComplete() {
       ms._tiebreakSubmitted = true;
       ms._tiebreakRequired  = true;
       ms._tiebreakMatchId   = result.tiebreak_match_id || ms._tiebreakMatchId;
-      ms._totalMyScore      = myScore;
       saveMatchState();
       _setStatus(`Score submitted — waiting for ${escHtml(ms.oppName)}…`);
       return;

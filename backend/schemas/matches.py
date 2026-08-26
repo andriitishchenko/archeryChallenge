@@ -66,6 +66,7 @@ class MatchStatusOut(BaseModel):
     opp_score:          Optional[int]
     opp_submitted:      bool
     my_submitted:       bool
+    # Final sudden-death arrows are returned for active and completed tiebreaks.
     tiebreak_my_arrow:  Optional[int]
     tiebreak_opp_arrow: Optional[int]
     result:             Optional[str]

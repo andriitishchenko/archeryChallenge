@@ -35,10 +35,17 @@ const WS = (() => {
     return `${WS_BASE}/ws/user?token=${STATE.accessToken || ''}`;
   }
 
+  function _logWsSend(payload, sent = true, reason = null) {
+    console.info('[WS →] message', {
+      status: sent ? 'sent' : 'skipped',
+      reason,
+      payload: _redactForConsole(payload),
+    });
+  }
+
   function _startPing() {
     _pingTimer = setInterval(() => {
-      if (_ws?.readyState === WebSocket.OPEN)
-        _ws.send(JSON.stringify({ type: 'ping' }));
+      send({ type: 'ping' }, 'keepalive');
     }, 25_000);
   }
 
@@ -75,6 +82,10 @@ const WS = (() => {
         EventBus.emit(EVENT_TYPES.WS_SET_RESOLVED, {
           matchId: msg.match_id, set_number: msg.set_number,
           scores: msg.scores, winner_id: msg.winner_id, next_first: msg.next_first });
+        break;
+
+      case 'set_tiebreak_started':
+        EventBus.emit(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, { matchId: msg.match_id });
         break;
 
       case 'opp_score_done':
@@ -144,6 +155,7 @@ const WS = (() => {
       case 'rematch_proposed':
         EventBus.emit(EVENT_TYPES.WS_REMATCH_PROPOSED, {
           matchId: msg.match_id, proposed_by: msg.proposed_by,
+          originalMatchId: msg.original_match_id,
           challengeId: msg.challenge_id, scoring: msg.scoring,
           distance: msg.distance, arrow_count: msg.arrow_count, match_type: msg.match_type });
         break;
@@ -193,6 +205,7 @@ const WS = (() => {
       _ws = new WebSocket(_url());
 
       _ws.onopen = () => {
+        console.info('[WS] open', { channel: 'user' });
         _reconnectDelay = 1000;
         _startPing();
         EventBus.emit(EVENT_TYPES.WS_CONNECTED, { channel: 'user' });
@@ -204,9 +217,13 @@ const WS = (() => {
         _route(msg);
       };
 
-      _ws.onerror = () => { /* onclose fires next */ };
+      _ws.onerror = (event) => {
+        console.warn('[WS ×] error', { channel: 'user', event });
+        /* onclose fires next */
+      };
 
       _ws.onclose = (ev) => {
+        console.info('[WS] close', { channel: 'user', code: ev.code, reason: ev.reason });
         _stopPing();
         _ws = null;
         EventBus.emit(EVENT_TYPES.WS_DISCONNECTED, { channel: 'user', code: ev.code });
@@ -241,10 +258,12 @@ const WS = (() => {
     _open();
   }
 
-  function send(payload) {
+  function send(payload, reason = null) {
     if (_ws?.readyState === WebSocket.OPEN) {
+      _logWsSend(payload, true, reason);
       _ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
     } else {
+      _logWsSend(payload, false, reason || 'socket_not_open');
       console.warn('[WS] send skipped — socket not open:', payload.type);
     }
   }

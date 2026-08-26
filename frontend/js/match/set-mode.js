@@ -16,17 +16,17 @@ EventBus.on(EVENT_TYPES.WS_OPP_SET_DONE, ({ matchId, set_number, set_total }) =>
     if (ms.complete) { delete ms._pendingSetNumber; return; }
     const pendingSet = ms._pendingSetNumber;
     delete ms._pendingSetNumber;
-    const prevId = STATE.currentMatchId;
-    STATE.currentMatchId = matchId;
     api('POST', `/api/matches/${matchId}/set`, {
       set_number: pendingSet, arrows: ms.setArrowValues || [],
     }).then(result => {
       if (result) _applySetResult(result, matchId);
-      STATE.currentMatchId = prevId;
-    }).catch(() => { STATE.currentMatchId = prevId; });
+    }).catch(() => {});
   } else if (isActive) {
     const totalStr = set_total !== undefined ? ` (${set_total} pts)` : '';
     _setStatus(`${escHtml(ms.oppName)} submitted set ${set_number || ''}${totalStr} — waiting for your arrows…`);
+  } else {
+    showToast(`${escHtml(ms.oppName || 'Opponent')} submitted set ${set_number || ''}.`, 'info');
+    _fetchAndResolveMatch(matchId);
   }
 });
 
@@ -62,6 +62,21 @@ EventBus.on(EVENT_TYPES.WS_SET_RESOLVED, ({ matchId, set_number, scores, winner_
     _setStatus(`Set ${set_number}: ${myData.total}–${oppData.total} — ${label}  [${myData.pts}:${oppData.pts}]  ${nextMsg}`);
     // Brief pause so player reads the result before cells reset
     setTimeout(() => _nextSet(set_number), 1500);
+  }
+});
+
+// Set-system sudden death starts on the server when the sixth set is tied.
+// The event is also needed by a player who has already left the match screen.
+EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId }) => {
+  const ms = STATE.activeMatches[matchId];
+  if (!ms || ms._tiebreak) return;
+
+  ms._tiebreak = true;
+  saveMatchState();
+  if (STATE.currentMatchId === matchId) {
+    _startTiebreak();
+  } else {
+    showToast(`${escHtml(ms.oppName || 'Opponent')} — sudden death started.`, 'info');
   }
 });
 
@@ -223,6 +238,10 @@ function _applySetResult(result, targetMatchId) {
     else                               _nextSet(setNumber);
   } else if (result.match_complete) {
     completeMatch(ms.setMyScore, ms.setOppScore, mid, result.match_result ?? null);
+  } else if (result.tiebreak_required) {
+    ms._tiebreak = true;
+    saveMatchState();
+    showToast(`${escHtml(oppName)} — sudden death started.`, 'info');
   }
   saveMatchState();
 }

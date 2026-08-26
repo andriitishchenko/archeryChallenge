@@ -27,6 +27,9 @@ const STATE = {
   myChallenges:   [],
   history:            [],
   lastCompletedMatch: null,   // preserved after match ends so rematch flow can reference it
+  completedMatches:   {},     // completed match snapshots keyed by match id
+  pendingRematches:   {},     // rematch id → completed-match snapshot/metadata
+  completionMatchId:  null,   // match whose completion overlay is currently visible
   filters: {
     skill:   ['Beginner', 'Skilled', 'Master'],
     gender:  ['Male', 'Female'],

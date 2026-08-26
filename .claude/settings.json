@@ -1,0 +1,10 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN":"ollama",
+    "ANTHROPIC_BASE_URL":"http://localhost:11434",
+    "ANTHROPIC_MODEL":"igorls/gemma-4-E4B-it-heretic-GGUF:Q8_0"
+  },
+  "enabledPlugins": {
+  },
+  "model": "igorls/gemma-4-E4B-it-heretic-GGUF:Q8_0"
+}

@@ -189,6 +189,10 @@ async def submit_set(
             asyncio.create_task(manager.notify_match_all(match_id, {
                 "type": "match_complete", "match_id": match_id, "winner_id": winner_uid,
             }))
+        else:
+            asyncio.create_task(manager.notify_match_all(match_id, {
+                "type": "set_tiebreak_started", "match_id": match_id,
+            }))
     else:
         if set_winner == "me":
             set_label = f"{my_name} wins this set!"
@@ -468,11 +472,19 @@ def get_match_status(
         my_submitted  = me.submitted_at  is not None
 
     tiebreak_my_arrow = tiebreak_opp_arrow = None
-    if tiebreak_req and tb_match:
+    if tb_match:
         tb_me  = next((p for p in tb_match.participants if p.user_id == current_user.id), None)
         tb_opp = next((p for p in tb_match.participants if p.user_id != current_user.id), None)
-        my_submitted = tb_me.submitted_at is not None if tb_me else False
-        if tb_me and tb_opp and tb_opp.submitted_at is not None:
+        if tiebreak_req:
+            my_submitted = tb_me.submitted_at is not None if tb_me else False
+        # Keep the final sudden-death arrows available after the child match
+        # completes so both clients can render the same result. During a tied
+        # round the child scores are reset to None and remain hidden.
+        if (
+            tb_me and tb_opp
+            and tb_me.final_score is not None
+            and tb_opp.final_score is not None
+        ):
             tiebreak_my_arrow  = tb_me.final_score
             tiebreak_opp_arrow = tb_opp.final_score
 

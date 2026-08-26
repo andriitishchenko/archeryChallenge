@@ -322,8 +322,22 @@ async function refreshMyChallenges() {
       matchType: ch.match_type, discipline: ch.discipline || 'target',
       isBot: false, isCreator: ch.is_creator ?? true, complete: false, firstToAct: null,
       challengeKind: 'normal',
-      _tiebreakRequired: ch.tiebreak_required || false,
-      _tiebreakMatchId:  ch.tiebreak_match_id || null,
+      _tiebreakRequired: ch.tiebreak_required || existing?._tiebreakRequired || false,
+      _tiebreakMatchId:  ch.tiebreak_match_id || existing?._tiebreakMatchId || null,
+      firstToAct:         existing?.firstToAct || null,
+      _oppSetArrows:      existing?._oppSetArrows || [],
+      // Keep transient match flags when this screen refreshes the dashboard.
+      // They are needed by the websocket handlers for a match that continues
+      // while the user is viewing another screen.
+      _opponentJoined:    existing?._opponentJoined    || false,
+      _oppSubmitNotified: existing?._oppSubmitNotified || false,
+      _bgNotified:        existing?._bgNotified        || false,
+      _totalSubmitting:   existing?._totalSubmitting   || false,
+      _totalMyScore:      existing?._totalMyScore,
+      _tiebreakSubmitted: existing?._tiebreakSubmitted || false,
+      _pendingSetNumber:  existing?._pendingSetNumber,
+      _pendingTiebreak:   existing?._pendingTiebreak   || false,
+      _tiebreak:          existing?._tiebreak           || false,
     };
   }
 
@@ -417,7 +431,8 @@ async function acceptRematchFromList(rematchMatchId) {
   try {
     const data = await api('POST', `/api/matches/${rematchMatchId}/rematch/accept`);
     if (data?.new_match_id) {
-      const prev = STATE.lastCompletedMatch || {};
+      const prev = STATE.pendingRematches[rematchMatchId] || STATE.lastCompletedMatch || {};
+      delete STATE.pendingRematches[rematchMatchId];
       startMatch({
         id:         data.new_challenge_id || `rematch-${Date.now()}`,
         matchId:    data.new_match_id,

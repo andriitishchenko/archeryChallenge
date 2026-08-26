@@ -52,6 +52,28 @@ function _registerNavigationSubscriptions() {
     }
   });
 
+  EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({
+    wasDisplayed, matchState, myScore, oppScore, result,
+  }) => {
+    // score-input.js owns the completion overlay for the currently displayed
+    // match. Background matches need an independent notification because their
+    // overlay is not visible while the user is on another screen.
+    if (wasDisplayed || !matchState) return;
+
+    const opponent = escHtml(matchState.oppName || 'Opponent');
+    const score    = `${myScore}–${oppScore}`;
+    const outcome  = result === 'win' || result === 'loss' || result === 'draw'
+      ? result : myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const message  = outcome === 'win'
+      ? `${opponent} — you win (${score})!`
+      : outcome === 'loss'
+        ? `${opponent} — you lose (${score}).`
+        : `${opponent} — draw (${score}).`;
+    showToast(message, outcome === 'win' ? 'success' : outcome === 'loss' ? 'error' : 'info');
+    _updateResumeTab();
+    if (STATE.currentScene === 'my-challenges') refreshMyChallenges();
+  });
+
   EventBus.on(EVENT_TYPES.WS_CHALLENGE_EXPIRED, ({ matchId, challengeId, you_lost, reason }) => {
     showToast(reason || (you_lost ? 'Time expired — you lost.' : 'Your opponent timed out — you win!'),
       you_lost ? 'error' : 'info');
@@ -314,6 +336,10 @@ function _clearLocalChallengesAndMatches() {
   STATE.myChallenges   = [];
   STATE.challenges     = [];
   STATE.history        = [];
+  STATE.lastCompletedMatch = null;
+  STATE.completedMatches   = {};
+  STATE.pendingRematches   = {};
+  STATE.completionMatchId  = null;
   localStorage.removeItem('arrowmatch_active_matches');
   localStorage.removeItem('arrowmatch_my_challenges');
   localStorage.removeItem('arrowmatch_history');

@@ -11,6 +11,26 @@ class ApiError extends Error {
   }
 }
 
+function _redactForConsole(value) {
+  if (Array.isArray(value)) return value.map(_redactForConsole);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+    const sensitive = /token|password|secret|authorization/i.test(key);
+    return [key, sensitive ? '[redacted]' : _redactForConsole(item)];
+  }));
+}
+
+function _logApiRequest(method, path, body, headers, retry = false) {
+  console.info('[API →] request', {
+    method,
+    url: `${API_BASE}${path}`,
+    retry,
+    headers: _redactForConsole(headers),
+    body: _redactForConsole(body),
+  });
+}
+
 /**
  * Central API helper.
  * Handles auth headers, token refresh on 401, and JSON parsing.
@@ -31,12 +51,16 @@ async function api(method, path, body = null, { skipAuth = false } = {}) {
     headers: overrideHeaders || headers,
     body: (!bodyless && hasBody) ? JSON.stringify(body) : undefined,
   });
+  const sendRequest = (requestHeaders, retry = false) => {
+    _logApiRequest(method, path, body, requestHeaders, retry);
+    return fetch(`${API_BASE}${path}`, fetchOpts(requestHeaders));
+  };
 
   let resp;
   try {
-    resp = await fetch(`${API_BASE}${path}`, fetchOpts());
+    resp = await sendRequest(headers);
   } catch (err) {
-    console.warn('API offline:', path, err.message);
+    console.warn('[API ×] request failed', { method, path, error: err.message });
     return null;
   }
 
@@ -45,7 +69,7 @@ async function api(method, path, body = null, { skipAuth = false } = {}) {
     const refreshed = await _tryRefresh();
     if (refreshed) {
       const retryHeaders = { ...headers, 'Authorization': `Bearer ${STATE.accessToken}` };
-      resp = await fetch(`${API_BASE}${path}`, fetchOpts(retryHeaders));
+      resp = await sendRequest(retryHeaders, true);
     } else {
       _clearSession();
       showScene('entry');

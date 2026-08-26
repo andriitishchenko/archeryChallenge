@@ -131,6 +131,7 @@ async def propose_rematch(
     asyncio.create_task(manager.notify_user(opp.user_id, {
         "type":         "rematch_proposed",
         "match_id":     new_match_id,
+        "original_match_id": match.id,
         "challenge_id": new_ch_id,
         "proposed_by":  proposer_name,
         "scoring":      ch.scoring.value,

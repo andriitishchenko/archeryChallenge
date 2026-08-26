@@ -1,0 +1,10 @@
+Legacy documentation pointer
+============================
+
+Use these canonical files instead:
+
+- README.md — setup, architecture, API, and verification
+- CLAUDE.md — coding-agent rules and workflow
+- app_spec.txt — product requirements
+
+Do not add new instructions or duplicated project facts to this file.

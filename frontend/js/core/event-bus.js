@@ -57,6 +57,7 @@ const EVENT_TYPES = Object.freeze({
   WS_OPP_SCORE_DONE:        'ws:opp_score_done',
   WS_OPP_SCORE_SUBMITTED:   'ws:opp_score_submitted',
   WS_SET_RESOLVED:          'ws:set_resolved',
+  WS_SET_TIEBREAK_STARTED:  'ws:set_tiebreak_started',
   WS_TIEBREAK_STARTED:      'ws:tiebreak_started',
 
   // Rematch

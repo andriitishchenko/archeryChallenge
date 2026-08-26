@@ -38,6 +38,7 @@ function startMatch(challenge, isCreator = false) {
   };
 
   STATE.activeMatches[matchId] = newMs;
+  if (!background) STATE.completionMatchId = null;
   if (!background) STATE.currentMatchId = matchId;
 
   saveMatchState();
@@ -93,6 +94,7 @@ function switchToMatch(matchId) {
   }
 
   STATE.currentMatchId = matchId;
+  STATE.completionMatchId = null;
   arrowValues          = [...(ms.arrowValues || [])];
 
   showScene('challenge');
@@ -123,18 +125,22 @@ function completeMatch(myScore, oppScore, targetMatchId, result = null, tiebreak
   if (!ms) return;
 
   const wasDisplayed = (mid === STATE.currentMatchId);
+  if (wasDisplayed) STATE.completionMatchId = mid;
 
   ms.complete      = true;
   ms.myFinalScore  = myScore;
   ms.oppFinalScore = oppScore;
-  ms.result        = result;
+  ms.result        = result === 'me' ? 'win'
+                    : result === 'opponent' ? 'loss' : result;
   if (tiebreakArrows) ms._tiebreakArrows = tiebreakArrows;
 
-  STATE.lastCompletedMatch = {
+  const completed = {
     id: ms.id, oppName: ms.oppName, scoring: ms.scoring,
     arrowCount: ms.arrowCount, dist: ms.dist,
     matchType: ms.matchType || 'live', isBot: ms.isBot,
   };
+  STATE.completedMatches[ms.id] = completed;
+  STATE.lastCompletedMatch = completed;
 
   _removeActiveMatch(mid);
   saveToHistory(ms);
@@ -202,7 +208,10 @@ async function proposeRematch() {
 
   try {
     const data = await api('POST', `/api/matches/${prev.id}/rematch`);
-    if (data?.new_match_id) prev._rematchMatchId = data.new_match_id;
+    if (data?.new_match_id) {
+      prev._rematchMatchId = data.new_match_id;
+      STATE.pendingRematches[data.new_match_id] = prev;
+    }
   } catch (e) {
     showToast(e.message || 'Could not propose rematch', 'error');
     EventBus.emit(EVENT_TYPES.APP_REMATCH_PENDING_CANCEL, {});
@@ -210,10 +219,11 @@ async function proposeRematch() {
 }
 
 async function acceptRematch() {
-  const prev = STATE.lastCompletedMatch;
+  const overlayRematchId = document.getElementById('rematch-request')?.dataset.matchId;
+  const prev = STATE.pendingRematches[overlayRematchId] || STATE.lastCompletedMatch;
   if (!prev) { showToast('No completed match found', 'error'); return; }
 
-  const rematchMatchId = prev._rematchMatchId;
+  const rematchMatchId = prev._rematchMatchId || overlayRematchId;
   if (!rematchMatchId) { showToast('Rematch match not found', 'error'); return; }
 
   EventBus.emit(EVENT_TYPES.APP_REMATCH_ACCEPTED_LOCAL, {});
@@ -235,8 +245,9 @@ async function acceptRematch() {
 }
 
 async function declineRematch() {
-  const prev = STATE.lastCompletedMatch;
-  const rematchMatchId = prev?._rematchMatchId;
+  const overlayRematchId = document.getElementById('rematch-request')?.dataset.matchId;
+  const prev = STATE.pendingRematches[overlayRematchId] || STATE.lastCompletedMatch;
+  const rematchMatchId = prev?._rematchMatchId || overlayRematchId;
   EventBus.emit(EVENT_TYPES.APP_REMATCH_DECLINED_LOCAL, {});
   try {
     if (rematchMatchId) await api('POST', `/api/matches/${rematchMatchId}/rematch/decline`);
@@ -360,7 +371,10 @@ async function _fetchAndResolveMatch(matchId) {
 
     if (status.status === 'complete' && status.result) {
       if (isActive) _setStatus('');
-      const myFinal  = isSets ? (status.my_set_points  ?? 0) : (ms._totalMyScore ?? status.my_score  ?? 0);
+      // The parent total remains the match score after sudden death. Do not
+      // use the locally cached tiebreak arrow as myFinal: before this status
+      // response it may have been the last value entered by this client.
+      const myFinal  = isSets ? (status.my_set_points  ?? 0) : (status.my_score  ?? ms._totalMyScore ?? 0);
       const oppFinal = isSets ? (status.opp_set_points ?? 0) : (status.opp_score ?? 0);
       const tbArrows = status.tiebreak_my_arrow != null
         ? { my: status.tiebreak_my_arrow, opp: status.tiebreak_opp_arrow } : null;
@@ -521,10 +535,24 @@ EventBus.on(EVENT_TYPES.WS_OPPONENT_DISCONNECTED, ({ matchId }) => {
   if (STATE.currentMatchId === matchId) showToast('Opponent disconnected', 'error');
 });
 
-EventBus.on(EVENT_TYPES.WS_REMATCH_PROPOSED, ({ matchId, proposed_by }) => {
-  const prev = STATE.lastCompletedMatch;
+EventBus.on(EVENT_TYPES.WS_REMATCH_PROPOSED, ({
+  matchId, originalMatchId, proposed_by, scoring, distance, arrow_count, match_type,
+}) => {
+  const prev = STATE.completedMatches[originalMatchId] || STATE.lastCompletedMatch;
   if (prev) prev._rematchMatchId = matchId;
-  const onCompleteScreen = !document.getElementById('match-complete')?.classList.contains('hidden');
+  STATE.pendingRematches[matchId] = {
+    ...(prev || {}),
+    id: originalMatchId || prev?.id || null,
+    oppName: proposed_by || prev?.oppName || 'Opponent',
+    scoring: scoring || prev?.scoring || 'total',
+    dist: distance || prev?.dist || '30m',
+    arrowCount: arrow_count || prev?.arrowCount || 18,
+    matchType: match_type || prev?.matchType || 'live',
+    _rematchMatchId: matchId,
+  };
+  const onCompleteScreen = STATE.currentScene === 'challenge'
+    && (!originalMatchId || STATE.completionMatchId === originalMatchId)
+    && !document.getElementById('match-complete')?.classList.contains('hidden');
   if (onCompleteScreen) {
     EventBus.emit(EVENT_TYPES.APP_SHOW_REMATCH_REQUEST, {
       matchId, proposerName: proposed_by || prev?.oppName || 'Opponent',
@@ -536,9 +564,11 @@ EventBus.on(EVENT_TYPES.WS_REMATCH_PROPOSED, ({ matchId, proposed_by }) => {
 
 EventBus.on(EVENT_TYPES.WS_REMATCH_ACCEPTED, (payload) => {
   const { matchId, ...data } = payload;
-  const prev = STATE.lastCompletedMatch || {};
+  const prev = STATE.pendingRematches[data.match_id] || STATE.lastCompletedMatch || {};
   if (STATE.activeMatches[data.match_id]) return; // dedup
+  delete STATE.pendingRematches[data.match_id];
   EventBus.emit(EVENT_TYPES.APP_REMATCH_PENDING_CANCEL, {});
+  showToast(`${escHtml(data.opponent_name || prev.oppName || 'Opponent')} accepted the rematch!`, 'success');
   _launchRematchMatch({
     new_match_id: data.match_id, new_challenge_id: data.challenge_id,
     opponent_name: data.opponent_name || prev.oppName,
@@ -549,9 +579,11 @@ EventBus.on(EVENT_TYPES.WS_REMATCH_ACCEPTED, (payload) => {
 });
 
 EventBus.on(EVENT_TYPES.WS_MATCH_READY, (payload) => {
-  const prev = STATE.lastCompletedMatch || {};
+  const prev = STATE.pendingRematches[payload.matchId] || STATE.lastCompletedMatch || {};
   if (STATE.activeMatches[payload.matchId]) return; // dedup
+  delete STATE.pendingRematches[payload.matchId];
   EventBus.emit(EVENT_TYPES.APP_REMATCH_OVERLAY_HIDE, {});
+  showToast(`${escHtml(payload.opponent_name || prev.oppName || 'Opponent')} is ready for a rematch!`, 'success');
   _launchRematchMatch({
     new_match_id: payload.matchId, new_challenge_id: payload.challengeId,
     opponent_name: payload.opponent_name || prev.oppName,
@@ -562,7 +594,8 @@ EventBus.on(EVENT_TYPES.WS_MATCH_READY, (payload) => {
 });
 
 EventBus.on(EVENT_TYPES.WS_REMATCH_DECLINED, ({ matchId, declined_by }) => {
-  const prev = STATE.lastCompletedMatch || {};
+  const prev = STATE.pendingRematches[matchId] || STATE.lastCompletedMatch || {};
+  delete STATE.pendingRematches[matchId];
   EventBus.emit(EVENT_TYPES.APP_REMATCH_PENDING_CANCEL, {});
   EventBus.emit(EVENT_TYPES.APP_REMATCH_ACTIONS_SHOW, {});
   showToast(`${escHtml(declined_by || prev.oppName || 'Opponent')} declined the rematch`, 'info');

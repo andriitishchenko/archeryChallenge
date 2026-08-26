@@ -1,0 +1,211 @@
+<project_specification>
+  <!-- Desired product scope. Current implementation status is tracked in FUNCTIONAL_NOTES.md. -->
+  <project_name>ArrowMatch</project_name>
+
+  <overview>
+    ArrowMatch is an online, real-time platform for random archery opponents. It functions as a "Chatroulette-style" sports challenge platform, enabling players to connect, compete, and record detailed results in real time.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>Vanilla JS modules</framework>
+      <styling>CSS (Mobile-first SPA)</styling>
+      <additional_frontend_config>Event-driven architecture via EventBus and shared STATE object.</additional_frontend_config>
+    </frontend>
+    <backend>
+      <runtime>FastAPI</runtime>
+      <database>PostgreSQL (defaulting to SQLite during development)</database>
+      <additional_backend_config>WebSockets for real-time updates; JWT for stateless authentication.</additional_backend_config>
+    </backend>
+    <communication>
+      <api>REST and WebSocket</api>
+      <additional_communication_config>Single persistent socket per user for match updates.</additional_communication_config>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      Requires Python/FastAPI environment with SQLAlchemy/Pydantic dependencies. Local development uses SQLite; production must use PostgreSQL.
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>29</feature_count>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="Registered User">
+        <permissions>
+          - Full persistent profile management (name, bow_type, skill_level).
+          - Access to global match history and ranking leaderboards.
+          - Creation and management of private and public challenges.
+        </permissions>
+        <protected_routes>
+          - /api/auth/* (all authenticated endpoints)
+          - /api/profile/* (CRUD operations)
+        </protected_routes>
+      </role>
+      <role name="Guest User">
+        <permissions>
+          - Ability to join/create challenges and play matches.
+          - Temporary profile stored in localStorage for the session.
+        </permissions>
+        <protected_routes>
+          - None (can use any publicly exposed endpoint).
+        </protected_routes>
+      </role>
+    </user_roles>
+    <authentication>
+      <method>Email/Password (JWT) and Guest Mode</method>
+      <session_timeout>Managed via JWT refresh token/local storage, or ephemeral for guests.</session_timeout>
+      <password_requirements>Standard requirements (via bcrypt) for security.</password_requirements>
+    </authentication>
+    <sensitive_operations>
+      - Deleting/resetting account requires explicit confirmation.
+    </sensitive_operations>
+  </security_and_access_control>
+
+  <core_features>
+    <User Authentication & Profile>
+      - User registration and login.
+      - Profile creation and persistent updates.
+      - Guest mode activation for immediate gameplay.
+      - Leaderboard contribution for registered users.
+    </User>
+    <Challenges & Discovery>
+      - Creating public and private challenges (invitation-only).
+      - Filtering public challenges by profile attributes (skill, gender, distance, bow type).
+      - Joining or cancelling an existing challenge.
+    </Challenges>
+    <Matches & Gameplay>
+      - Real-time arrow score submission (via WS).
+      - Set-point and total-score calculation.
+      - Automated resolution of matches and sets.
+      - Automated tiebreaker challenge initiation and resolution.
+      - Forfeit mechanism for mid-match failure/quitting.
+      - Rematch proposal and acceptance/declination.
+    </Matches>
+    <History & Tracking>
+      - Detailed match history view (showing every arrow value and set breakdown).
+      - Global ranking display based on performance.
+      - Achievement system support (tracked milestones like "First Win").
+    </History>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id(PK), email, hashed_password, is_guest, created_at, last_seen
+      </users>
+      <profiles>
+        - user_id(FK), name, gender, age, bow_type, skill_level, country
+      </profiles>
+      <challenges>
+        - id, creator_id(FK), challenge_kind, match_type, discipline, scoring, distance, arrow_count, invite_message, deadline, is_private, is_active, parent_id(FK)
+      </challenges>
+      <matches>
+        - id, challenge_id(FK→NULL), parent_match_id(FK→NULL), status, created_at, completed_at, first_to_act, rematch_status, rematch_proposed_by
+      </matches>
+      <match_participants>
+        - id, match_id(FK), user_id(FK), is_creator, is_bot, final_score, result, submitted_at
+      </match_participants>
+      <arrow_scores>
+        - id, participant_id(FK), arrow_index, value, set_number
+      </arrow_scores>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <Auth>
+      - POST /api/guest
+      - POST /api/auth/register
+      - POST /api/auth/login
+      - POST /api/auth/refresh
+      - GET /api/auth/me
+    </Auth>
+    <Challenges>
+      - GET /api/challenges?skill=&gender=&bow=&dist=&country=
+      - POST /api/challenges
+      - POST /api/challenges/{id}/join
+    </Challenges>
+    <Matches>
+      - GET /api/matches/mine/active
+      - GET /api/matches/{id}/status
+      - POST /api/matches/{id}/score
+      - POST /api/matches/{id}/forfeit
+      - POST /api/matches/{id}/rematch
+    </Matches>
+    <Stats>
+      - GET /api/history
+      - GET /api/ranking?bow_type=
+      - GET /api/achievements
+    </Stats>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      Single Page Application (SPA) shell, managed by app-init.js. Features a challenge browsing screen, main match scene (score-input.js), and dedicated screens for auth, history, and settings.
+    </main_structure>
+    <additional_ui_sections>
+      Toast notifications, match status overlays, and navigation for different screens (challenges, history, settings).
+    </additional_ui_sections>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      (Not explicitly defined, but suggested by a "sports challenge" theme.)
+    </color_palette>
+    <typography>
+      (Not explicitly defined, but suggested by Vanilla JS/mobile-first approach.)
+    </typography>
+  </design_system>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Foundation Setup & Authentication</title>
+      <tasks>
+        - Implement database connection and schema migration guard.
+        - Build core user/profile CRUD endpoints (Guest/Registered).
+        - Implement token generation and validation.
+      </tasks>
+    </step>
+    <step number="2">
+      <title>Challenge Discovery & Creation</title>
+      <tasks>
+        - Implement Challenge model and all related GET/POST endpoints.
+        - Build frontend filtering UI driven by challenge parameters.
+        - Implement private challenge invitation logic.
+      </tasks>
+    </step>
+    <step number="3">
+      <title>Real-time Match Engine</title>
+      <tasks>
+        - Implement WebSocket connection and manager.
+        - Build core match state logic (score submission, set resolution).
+        - Implement forfeit and rematch flows.
+      </tasks>
+    </step>
+    <step number="4">
+      <title>Tracking and Polish</title>
+      <tasks>
+        - Implement detailed match history persistence.
+        - Build global ranking and achievement logic.
+        - Finalize UI polish and mobile responsiveness across all screens.
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      All core features (auth, match flow, challenge discovery, score persistence) must work end-to-end.
+    </functionality>
+    <user_experience>
+      The real-time update during a match must feel instantaneous and smooth. The flow from challenge selection to active match must be seamless.
+    </user_experience>
+    <technical_quality>
+      Code must adhere to a strict separation of concerns (e.g., API -> Service -> Model; UI -> EventBus).
+    </technical_quality>
+    <design_polish>
+      The application must be fully responsive and visually clear on mobile devices.
+    </design_polish>
+  </success_criteria>
+</project_specification>

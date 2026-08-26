@@ -57,10 +57,12 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 
 - One user session → maintains one `/ws/user` connection → server events are routed through `frontend/js/core/ws.js` and `EventBus`.
 - WebSocket connect, receive, route, send, queue, failure, and close → logger `arrowmatch.websocket` records the user, message type, match ID, recipients, and payload → server logs show whether a message arrived, was routed, sent, queued offline, or failed.
+- Browser API or WebSocket send → the browser console records the method/channel, target, payload, and send/skip status → authentication tokens, passwords, and secrets are redacted from diagnostics.
 - Total-score submission → stores the player's arrow values and waits for the opponent → the server resolves win/loss when both scores exist.
 - Equal total scores → keeps the parent match unresolved and starts a tiebreak child match → tiebreak data is linked to the parent match.
 - One tiebreak arrow submitted while the opponent is still pending → keeps the submitted arrow visible and locks the input → a new arrow is requested only after both players submit equal values.
 - Page reload during a total-score tiebreak → `/api/matches/{id}/status` returns the active tiebreak stage and child ID, then the frontend renders the restored state → the one-arrow sudden-death UI is preserved instead of returning to the parent match's original arrow count.
+- Completed total-score tiebreak → parent status keeps the original total scores and returns the final tiebreak arrows → the completion popup shows consistent totals and tiebreak values on both clients.
 - Set submission → stores the set arrows and resolves the set when both players submit the same set → points follow 2 for win, 1 for draw, 0 for loss; first to 6 wins.
 - Set score reaches 5:5 → starts sudden-death tiebreak scoring → one arrow is compared and equal arrows repeat.
 - Forfeit → marks the player as loss, the opponent as win, completes the match, and notifies the opponent → a completed match cannot be forfeited again.
@@ -71,7 +73,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 
 - Matchmaking request → searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, a bot opponent is generated.
 - Offline notification → queues up to 50 messages per user → queued messages flush when that user reconnects.
-- Rematch proposal → creates a private waiting rematch match and notifies the opponent → duplicate proposals are rejected.
+- Rematch proposal → creates a private waiting rematch match and notifies the opponent with the original match ID → duplicate proposals are rejected and the client can associate the request with the correct completed match.
 - Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event and the declined match is removed.
 
 ### History, ranking, and client state
@@ -80,6 +82,11 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Achievement request → calculates earned badges from completed matches and consecutive win streaks (5, 10, and 25 wins) → badges are derived from server data.
 - Active match state → is kept in `STATE.activeMatches[matchId]` and cached in local storage for session recovery → server status wins over stale browser cache.
 - Background match event → shows a notification and updates the resume indicator without switching away from the current screen → active match remains selectable.
+- Background match completion → resolves the authoritative result, records it in history, and shows a win/loss/draw toast without switching screens → the resume indicator and My Challenges list are refreshed.
+- Navigation to My Challenges while a match is active → refreshes server match metadata while retaining transient scoring/tiebreak flags → later WebSocket events continue to resolve the background match.
+- Background tiebreak event → retains the tiebreak stage and shows a notification without opening the match screen → the player can resume the match from the resume indicator.
+- Rematch proposal received outside the completion screen → shows a rematch toast and keeps the proposal available in My Challenges → the completion overlay is only used when the match screen is currently displayed.
+- Set score tied at 6:6 → broadcasts `set_tiebreak_started` to both participants → both players can enter the sudden-death arrow even if one is viewing another screen.
 - Bot/offline fallback → supports local gameplay when the real opponent path is unavailable → it is not a substitute for persisted server data.
 
 ## Explicit current limits

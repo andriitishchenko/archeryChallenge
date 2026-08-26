@@ -50,7 +50,7 @@ async def ws_user(
     Server → client events (all include match_id where relevant):
       opponent_score_submitted, opponent_forfeited, challenge_expired,
       new_challenge, challenge_removed, opponent_joined, match_complete,
-      tiebreak_started, match_ready,
+      tiebreak_started, set_tiebreak_started, match_ready,
       rematch_proposed, rematch_accepted, rematch_declined,
       opp_arrow, opp_set_done, opp_score_done, opp_tiebreak_done,
       set_resolved, opponent_disconnected,
