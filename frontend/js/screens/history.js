@@ -70,12 +70,20 @@ function renderAchievements(serverBadges = null) {
     badges = serverBadges.map(b => ({ icon: b.icon, label: b.label, earned: b.earned }));
   } else {
     const total = STATE.history.length;
-    let streak  = 0;
-    for (const h of STATE.history) { if (h.result === 'win') streak++; else break; }
+    let streak = 0;
+    let maxStreak = 0;
+    for (const h of STATE.history) {
+      if (h.result === 'win') {
+        streak++;
+        maxStreak = Math.max(maxStreak, streak);
+      } else {
+        streak = 0;
+      }
+    }
     badges = [
-      { icon: '🔥', label: '5 Win Streak',  earned: streak >= 5   },
-      { icon: '⚡', label: '10 Win Streak', earned: streak >= 10  },
-      { icon: '👑', label: '25 Win Streak', earned: streak >= 25  },
+      { icon: '🔥', label: '5 Win Streak',  earned: maxStreak >= 5   },
+      { icon: '⚡', label: '10 Win Streak', earned: maxStreak >= 10  },
+      { icon: '👑', label: '25 Win Streak', earned: maxStreak >= 25  },
       { icon: '🎯', label: '10 Matches',    earned: total  >= 10  },
       { icon: '🏹', label: '50 Matches',    earned: total  >= 50  },
       { icon: '🌟', label: '100 Matches',   earned: total  >= 100 },

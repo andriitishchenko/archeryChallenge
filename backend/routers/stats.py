@@ -151,18 +151,29 @@ def get_achievements(
         .all()
     )
 
-    total_matches = len(participants)
-    win_streak    = 0
+    # Tiebreak children are represented by their parent match in history and
+    # must not create an extra win or split the user's actual win sequence.
+    completed_matches = []
     for p in participants:
+        match = load_match(p.match_id, db)
+        if match.challenge and match.challenge.challenge_kind == ChallengeKindEnum.tiebreak:
+            continue
+        completed_matches.append(p)
+
+    total_matches = len(completed_matches)
+    current_streak = 0
+    max_win_streak = 0
+    for p in completed_matches:
         if p.result == MatchResultEnum.win:
-            win_streak += 1
+            current_streak += 1
+            max_win_streak = max(max_win_streak, current_streak)
         else:
-            break
+            current_streak = 0
 
     badge_defs = [
-        ("streak_5",    "🔥", "5 Win Streak",  win_streak    >= 5),
-        ("streak_10",   "⚡", "10 Win Streak",  win_streak    >= 10),
-        ("streak_25",   "👑", "25 Win Streak",  win_streak    >= 25),
+        ("streak_5",    "🔥", "5 Win Streak",  max_win_streak >= 5),
+        ("streak_10",   "⚡", "10 Win Streak", max_win_streak >= 10),
+        ("streak_25",   "👑", "25 Win Streak", max_win_streak >= 25),
         ("matches_10",  "🎯", "10 Matches",     total_matches >= 10),
         ("matches_50",  "🏹", "50 Matches",     total_matches >= 50),
         ("matches_100", "🌟", "100 Matches",    total_matches >= 100),

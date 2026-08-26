@@ -79,7 +79,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 ### History, ranking, and client state
 
 - Completed human matches → appear in history and contribute to ranking → tiebreak child matches are not counted as separate normal matches.
-- Achievement request → calculates earned badges from completed matches and consecutive win streaks (5, 10, and 25 wins) → badges are derived from server data.
+- Achievement request → calculates the maximum historical consecutive-win streak from completed parent matches and evaluates 5, 10, and 25-win badges independently → once a streak has occurred, a later loss or draw does not un-highlight the smaller completed streak badge.
 - Active match state → is kept in `STATE.activeMatches[matchId]` and cached in local storage for session recovery → server status wins over stale browser cache.
 - Background match event → shows a notification and updates the resume indicator without switching away from the current screen → active match remains selectable.
 - Background match completion → resolves the authoritative result, records it in history, and shows a win/loss/draw toast without switching screens → the resume indicator and My Challenges list are refreshed.
