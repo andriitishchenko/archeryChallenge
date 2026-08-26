@@ -1,6 +1,6 @@
 // =============================================
 // ARROWMATCH — Auth Screen
-// Guest, login, register, logout.
+// Guest, login, register, password reset, logout.
 // Depends on: core/state.js, core/api.js, core/utils.js
 // =============================================
 
@@ -109,6 +109,73 @@ async function handleCreateAccount() {
   }
 }
 
+const ENTRY_FORM_IDS = [
+  'entry-form-login',
+  'entry-form-register',
+  'entry-form-forgot',
+  'entry-form-reset',
+];
+
+function _showEntryForm(formId) {
+  ENTRY_FORM_IDS.forEach((id) => {
+    document.getElementById(id)?.classList.toggle('hidden', id !== formId);
+  });
+}
+
+function showForgotPassword() {
+  _showEntryForm('entry-form-forgot');
+  document.getElementById('forgot-email')?.focus();
+}
+
+async function handleRequestPasswordReset() {
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) { showToast('Enter your email', 'error'); return; }
+  if (!validateEmail(email)) { showToast('Invalid email', 'error'); return; }
+
+  try {
+    const data = await api('POST', '/api/auth/forgot-password', { email }, { skipAuth: true });
+    if (!data) {
+      showToast('Could not connect. Try again.', 'error');
+      return;
+    }
+    showToast(data.message || 'If an account exists, a reset link has been sent.', 'info');
+  } catch (e) {
+    showToast(e.message || 'Could not send reset link', 'error');
+  }
+}
+
+function showResetPasswordForm(token) {
+  const tokenInput = document.getElementById('reset-token');
+  if (!tokenInput || !token) return;
+  tokenInput.value = token;
+  _showEntryForm('entry-form-reset');
+}
+
+async function handleResetPassword() {
+  const token = document.getElementById('reset-token').value;
+  const password = document.getElementById('reset-password').value;
+  const confirmation = document.getElementById('reset-password-confirm').value;
+  if (!token) { showToast('Reset link is missing', 'error'); return; }
+  if (password.length < 8) { showToast('Password min 8 characters', 'error'); return; }
+  if (password !== confirmation) { showToast('Passwords do not match', 'error'); return; }
+
+  try {
+    const data = await api('POST', '/api/auth/reset-password',
+      { token, password }, { skipAuth: true });
+    if (!data) {
+      showToast('Could not connect. Try again.', 'error');
+      return;
+    }
+    document.getElementById('reset-password').value = '';
+    document.getElementById('reset-password-confirm').value = '';
+    _showEntryForm('entry-form-login');
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+    showToast(data.message || 'Password reset. You can now sign in.', 'success');
+  } catch (e) {
+    showToast(e.message || 'Could not reset password', 'error');
+  }
+}
+
 function handleLogout() {
   _clearSession();
   localStorage.clear();
@@ -116,6 +183,7 @@ function handleLogout() {
 }
 
 function toggleRegister() {
-  document.getElementById('entry-form-login').classList.toggle('hidden');
-  document.getElementById('entry-form-register').classList.toggle('hidden');
+  const registerForm = document.getElementById('entry-form-register');
+  _showEntryForm(registerForm.classList.contains('hidden')
+    ? 'entry-form-register' : 'entry-form-login');
 }

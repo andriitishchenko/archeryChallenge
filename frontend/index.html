@@ -77,7 +77,8 @@
           <button class="btn-primary full" onclick="handleLogin()">Sign In</button>
           <div class="divider"><span>or</span></div>
           <button class="btn-ghost full" onclick="handleGuest()">Continue as Guest</button>
-          <p class="entry-hint">New here? <a href="#" onclick="toggleRegister()">Create account</a></p>
+          <p class="entry-hint"><a href="#" onclick="showForgotPassword(); return false;">Forgot password?</a></p>
+          <p class="entry-hint">New here? <a href="#" onclick="toggleRegister(); return false;">Create account</a></p>
         </div>
         <div class="entry-form hidden" id="entry-form-register">
           <div class="form-group">
@@ -91,7 +92,30 @@
           <button class="btn-primary full" onclick="handleRegister()">Create Account</button>
           <div class="divider"><span>or</span></div>
           <button class="btn-ghost full" onclick="handleGuest()">Continue as Guest</button>
-          <p class="entry-hint">Have an account? <a href="#" onclick="toggleRegister()">Sign in</a></p>
+          <p class="entry-hint">Have an account? <a href="#" onclick="toggleRegister(); return false;">Sign in</a></p>
+        </div>
+        <div class="entry-form hidden" id="entry-form-forgot">
+          <p class="entry-hint">Enter your registered email and we’ll send you a password reset link.</p>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="forgot-email" placeholder="archer@example.com" autocomplete="email" />
+          </div>
+          <button class="btn-primary full" onclick="handleRequestPasswordReset()">Send Reset Link</button>
+          <p class="entry-hint"><a href="#" onclick="toggleRegister(); return false;">Back to sign in</a></p>
+        </div>
+        <div class="entry-form hidden" id="entry-form-reset">
+          <p class="entry-hint">Choose a new password for your ArrowMatch account.</p>
+          <input type="hidden" id="reset-token" />
+          <div class="form-group">
+            <label>New Password</label>
+            <input type="password" id="reset-password" placeholder="Min. 8 characters" autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label>Confirm Password</label>
+            <input type="password" id="reset-password-confirm" placeholder="Repeat your password" autocomplete="new-password" />
+          </div>
+          <button class="btn-primary full" onclick="handleResetPassword()">Set New Password</button>
+          <p class="entry-hint"><a href="#" onclick="toggleRegister(); return false;">Back to sign in</a></p>
         </div>
       </div>
     </div>

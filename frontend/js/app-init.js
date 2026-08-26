@@ -379,6 +379,13 @@ async function restoreSession() {
 
   const urlParams     = new URLSearchParams(window.location.search);
   const challengeCode = urlParams.get('c');
+  const resetToken    = urlParams.get('reset_token');
+
+  if (resetToken) {
+    showScene('entry');
+    showResetPasswordForm(resetToken);
+    return;
+  }
 
   if (savedUserId && savedAccess) {
     STATE.userId       = savedUserId;

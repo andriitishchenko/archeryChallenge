@@ -40,7 +40,7 @@
           - Creation and management of private and public challenges.
         </permissions>
         <protected_routes>
-          - /api/auth/* (all authenticated endpoints)
+          - Authenticated `/api/auth/*` endpoints; password reset request/confirmation are public
           - /api/profile/* (CRUD operations)
         </protected_routes>
       </role>
@@ -96,6 +96,9 @@
       <users>
         - id(PK), email, hashed_password, is_guest, created_at, last_seen
       </users>
+      <password_reset_tokens>
+        - id(PK), user_id(FK), token_hash, created_at, expires_at, used_at
+      </password_reset_tokens>
       <profiles>
         - user_id(FK), name, gender, age, bow_type, skill_level, country
       </profiles>
@@ -119,6 +122,8 @@
       - POST /api/guest
       - POST /api/auth/register
       - POST /api/auth/login
+      - POST /api/auth/forgot-password
+      - POST /api/auth/reset-password
       - POST /api/auth/refresh
       - GET /api/auth/me
     </Auth>

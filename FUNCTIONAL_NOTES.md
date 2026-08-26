@@ -6,7 +6,7 @@ This is a compact behavior ledger for implemented functionality. It protects exi
 
 | Area | Status | Current evidence or gap |
 | --- | --- | --- |
-| Auth, guest mode, JWT, profile | Implemented | Routes and persistence exist; guest flow smoke-tested. |
+| Auth, guest mode, JWT, password reset, profile | Implemented | Routes and persistence exist; guest flow and password reset API smoke-tested. |
 | Public/private challenges and filters | Implemented | Create, list, join, delete, invite-link, and notifications exist. |
 | Total/set scoring, tiebreak, forfeit | Implemented | Server scoring and state transitions exist. |
 | WebSocket events and matchmaking | Implemented | Single-user socket, human matching, single-shot bot fallback, offline queue, and bot-mode signalling exist. |
@@ -41,6 +41,8 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 ### Authentication and profile
 
 - Register with `existing_user_id` → upgrades the current guest row to a registered user → existing guest data remains attached to that user.
+- Password reset request → creates a hashed, one-time token for a registered email and sends an expiring SMTP reset link → the response stays generic for unknown addresses and the token is never stored in plaintext.
+- Password reset link → opens the reset form; submitting a valid new password → consumes the token and updates the account password → expired, reused, or invalid links are rejected and passwords are never emailed.
 - Login or refresh → issues a new access/refresh token pair → invalid credentials or refresh tokens are rejected.
 - Repeated register/login attempts → sliding-window IP rate limit applies → excess attempts receive HTTP 429.
 - `PUT /api/profile` → creates or updates the authenticated user's profile → challenge creation and joining remain blocked until a profile exists.

@@ -1,12 +1,13 @@
 """
 SQLAlchemy ORM models for ArrowMatch.
 
-Schema version: 3
+Schema version: 5
   - Challenge.parent_id: FK to parent challenge (null for root challenges)
   - Challenge.challenge_kind: 'normal' | 'tiebreak'
   - Tiebreak is a child challenge of the parent, linked to a new Match
   - Match.parent_match_id: FK to parent match (for tiebreak matches)
   - Removed submit_tiebreak endpoint — tiebreak uses submit_score on child match
+  - PasswordResetToken stores one-time password reset tokens
 """
 import enum
 from datetime import datetime
@@ -18,7 +19,7 @@ from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class GenderEnum(str, enum.Enum):
@@ -95,6 +96,24 @@ class User(Base):
     created_challenges = relationship("Challenge", foreign_keys="Challenge.creator_id",
                                       back_populates="creator", cascade="all, delete-orphan")
     match_participants = relationship("MatchParticipant", back_populates="user")
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    user_id    = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at   = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="password_reset_tokens")
 
 
 class Profile(Base):

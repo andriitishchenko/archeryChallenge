@@ -6,6 +6,8 @@ bcrypt wrapper bug that raises ValueError for passwords > 72 bytes.
 We also pre-truncate to 72 bytes ourselves for explicit, predictable behavior.
 """
 from datetime import datetime, timedelta
+import hashlib
+import secrets
 from typing import Optional
 
 import bcrypt
@@ -69,3 +71,13 @@ def get_user_id_from_token(token: str) -> Optional[str]:
     if payload is None:
         return None
     return payload.get("sub")
+
+
+def generate_password_reset_token() -> str:
+    """Create an opaque, URL-safe token for a single password reset."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_password_reset_token(token: str) -> str:
+    """Hash a reset token before persistence so the database never stores it raw."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

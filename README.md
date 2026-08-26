@@ -64,6 +64,12 @@ Set variables in `backend/.env` or the process environment. Settings are read wh
 | `DEBUG` | `false` | Enables `/docs` and `/redoc` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Access-token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh-token lifetime |
+| `PASSWORD_RESET_EXPIRE_MINUTES` | `60` | One-time password reset link lifetime |
+| `APP_BASE_URL` | `http://localhost:8000` | Base URL included in reset emails |
+| `SMTP_HOST` / `SMTP_PORT` | unset / `587` | SMTP server for password reset emails |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | unset | Optional SMTP credentials |
+| `SMTP_USE_TLS` | `true` | Use STARTTLS for SMTP |
+| `EMAIL_FROM` | `noreply@arrowmatch.local` | Sender address for reset emails |
 | `AUTH_RATE_LIMIT` | `5` | Auth attempts per rate window |
 | `AUTH_RATE_WINDOW` | `900` | Auth rate window in seconds |
 | `BOT_WAIT_SECONDS` | `8` | Delay before bot matchmaking fallback |
@@ -109,7 +115,7 @@ All protected HTTP requests use `Authorization: Bearer <access_token>`.
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /api/guest`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `GET /api/auth/me` |
+| Auth | `POST /api/guest`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/auth/refresh`, `GET /api/auth/me` |
 | Profile | `GET/PUT /api/profile`, `GET /api/profile/{user_id}` |
 | Challenges | `GET/POST /api/challenges`, `GET /api/challenges/mine`, `GET /api/challenges/{id}`, `DELETE /api/challenges/{id}`, `POST /api/challenges/{id}/join` (HTTP 409 when a participant has 10 open matches) |
 | Matches | `GET /api/matches/mine/active`, `GET /api/matches/{id}`, `GET /api/matches/{id}/status`, `POST /api/matches/{id}/set`, `POST /api/matches/{id}/score`, `POST /api/matches/{id}/forfeit` |
@@ -132,6 +138,8 @@ The frontend asks for confirmation before reload/close or browser Back while an 
 The server logger `arrowmatch.websocket` records WebSocket connect/disconnect, incoming messages, routing recipients, outgoing messages, offline queueing, and send failures at INFO/WARNING level. Run Uvicorn with its default INFO log level to see these diagnostics.
 
 The browser console records outgoing API requests as `[API →] request` and outgoing WebSocket messages as `[WS →] message`; connection lifecycle and skipped sends are logged too. Sensitive token, password, secret, and authorization values are redacted.
+
+Password recovery uses a one-time, expiring link rather than sending a password in plain text. Configure the SMTP settings above to deliver reset emails; with `DEBUG=true` and no SMTP host, the reset URL is logged for local development.
 
 ## Verification
 

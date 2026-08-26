@@ -2,7 +2,10 @@
 Pydantic schemas — all request/response models.
 Import from here: `from schemas import TokenResponse, ChallengeOut, ...`
 """
-from schemas.auth import GuestResponse, RegisterRequest, LoginRequest, TokenResponse, RefreshRequest, MeResponse
+from schemas.auth import (
+    GuestResponse, RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
+    MeResponse, ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse,
+)
 from schemas.challenges import ChallengeCreate, ChallengeOut, JoinResponse
 from schemas.matches import ArrowScoreItem, SetSubmission, SetResult, ScoreSubmission, MatchStatusOut, MatchParticipantOut, MatchOut, ActiveMatchOut, RematchOut
 from schemas.stats import HistoryItem, RankingEntry, RankingSummary, AchievementItem
@@ -10,6 +13,7 @@ from schemas.profile import ProfileRequest, ProfileResponse
 
 __all__ = [
     "GuestResponse","RegisterRequest","LoginRequest","TokenResponse","RefreshRequest","MeResponse",
+    "ForgotPasswordRequest","ResetPasswordRequest","PasswordResetResponse",
     "ChallengeCreate","ChallengeOut","JoinResponse",
     "ArrowScoreItem","SetSubmission","SetResult","ScoreSubmission",
     "MatchStatusOut","MatchParticipantOut","MatchOut","ActiveMatchOut","RematchOut",
