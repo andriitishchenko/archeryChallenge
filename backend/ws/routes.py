@@ -7,7 +7,7 @@ WebSocket endpoints — single connection architecture.
 
 Client → server message types:
   {type: "ping"}
-  {type: "arrow",    match_id, arrow_index, value}   — live arrow indicator to opponent
+  {type: "arrow",    match_id, arrow_index, value}   — live arrow indicator; value may be null to clear
   {type: "mm_find",  filters, profile}               — enter matchmaking queue
   {type: "mm_cancel"}                                — leave matchmaking queue
 
@@ -58,7 +58,7 @@ async def ws_user(
 
     Client → server:
       ping                                      — keepalive
-      arrow      {match_id, arrow_index, value} — stream live arrow to opponent
+      arrow      {match_id, arrow_index, value} — stream live arrow to opponent; null clears a preview
       mm_find    {filters, profile}             — join matchmaking queue
       mm_cancel                                 — leave matchmaking queue
     """

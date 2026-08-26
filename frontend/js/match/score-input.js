@@ -17,7 +17,25 @@
 
 // ── EventBus: match lifecycle ─────────────────────────────────────────────────
 
+let _pendingScoreSubmitTimer = null;
+
+function _cancelPendingScoreSubmission() {
+  if (_pendingScoreSubmitTimer) {
+    clearTimeout(_pendingScoreSubmitTimer);
+    _pendingScoreSubmitTimer = null;
+  }
+}
+
+function _scheduleScoreSubmission(callback) {
+  _cancelPendingScoreSubmission();
+  _pendingScoreSubmitTimer = setTimeout(() => {
+    _pendingScoreSubmitTimer = null;
+    callback();
+  }, 600);
+}
+
 EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }) => {
+  _cancelPendingScoreSubmission();
   // On a page reload, wait for the authoritative status response before
   // rendering. The dashboard can briefly contain stale pre-tiebreak data.
   if (background || restored) {
@@ -35,6 +53,7 @@ EventBus.on(EVENT_TYPES.APP_MATCH_STARTED, ({ matchState, restored, background }
 });
 
 EventBus.on(EVENT_TYPES.APP_MATCH_SWITCHED, ({ matchState }) => {
+  _cancelPendingScoreSubmission();
   // The opponent-results element is shared by all match views. Do not carry
   // the previous match's live arrow summary into the match being resumed.
   _oppIndicatorHide();
@@ -271,7 +290,7 @@ function buildArrowRows(count) {
     for (let i = 0; i < 3; i++) {
       const idx = start + i;
       html += idx < count
-        ? `<div class="arrow-cell" id="ac-${idx}" onclick="activateCell(${idx})"></div>`
+        ? `<div class="arrow-cell" id="ac-${idx}" onclick="activateCell(${idx})" ondblclick="deleteCell(${idx})"></div>`
         : `<div class="arrow-cell" style="visibility:hidden"></div>`;
     }
     html += `</div><span class="row-sum" id="rs-${r}"></span></div>`;
@@ -287,6 +306,7 @@ function buildSetArrowRow(count = 3) {
     cell.className = 'arrow-cell';
     cell.id        = `sac-${i}`;
     cell.onclick   = () => activateSetCell(i);
+    cell.ondblclick = () => deleteCell(i);
     container.appendChild(cell);
   }
   // NOTE: callers are responsible for setting arrowValues before calling refreshSetArrowCells()
@@ -386,7 +406,12 @@ function numInputTotal(val) {
   refreshArrowCells();
   updateTotalSum();
   sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
-  checkTotalComplete();
+  if (arrowValues.slice(0, count).every(v => v !== null)) {
+    // Leave a short correction window after the final tap. This matters on
+    // touch devices where an accidental tap otherwise submits immediately
+    // and disables DEL before the player can correct it.
+    _scheduleScoreSubmission(() => checkTotalComplete());
+  }
 }
 
 function numInputSet(val) {
@@ -402,46 +427,49 @@ function numInputSet(val) {
   // Stream arrow to opponent (arrow_index is set-relative: 0, 1, 2)
   sendMatchMessage({ type: 'arrow', arrow_index: prevIdx, value: val });
   if (arrowValues.length > 0 && arrowValues.every(v => v !== null)) {
-    setTimeout(() => {
+    _scheduleScoreSubmission(() => {
+      // A match switch cancels the pending submission; this identity guard
+      // also protects against a stale callback during a rapid navigation.
+      if (STATE.matchState !== ms) return;
       if (ms._tiebreak) resolveTiebreak();
       else              resolveSet();
-    }, 400);
+    });
   }
 }
 
 function numDel() {
-  if (STATE.matchState?.scoring === 'sets') numDelSet();
-  else                                      numDelTotal();
-  saveMatchState();
-}
-
-function numDelTotal() {
-  const ms    = STATE.matchState;
-  const count = ms._tiebreakRequired ? 1 : ms.arrowCount;
-  let target  = activeArrowIndex;
-  if (arrowValues[target] === null) {
-    for (let i = target - 1; i >= 0; i--) {
-      if (arrowValues[i] !== null) { target = i; break; }
-    }
-  }
-  arrowValues[target] = null;
-  if (!ms._tiebreakRequired) ms.arrowValues = [...arrowValues];
-  activeArrowIndex = target;
-  refreshArrowCells();
-  updateTotalSum();
-}
-
-function numDelSet() {
+  _cancelPendingScoreSubmission();
+  const ms = STATE.matchState;
+  if (!ms || ms.complete || ms._totalSubmitting || ms._setSubmitting || ms._tiebreakSubmitting) return;
   let target = activeArrowIndex;
   if (arrowValues[target] === null) {
     for (let i = target - 1; i >= 0; i--) {
       if (arrowValues[i] !== null) { target = i; break; }
     }
   }
-  arrowValues[target]             = null;
-  STATE.matchState.setArrowValues = [...arrowValues];
-  activeArrowIndex                = target;
-  refreshSetArrowCells();
+  deleteCell(target);
+}
+
+function deleteCell(idx) {
+  const ms = STATE.matchState;
+  if (!ms || ms.complete || ms._totalSubmitting || ms._setSubmitting || ms._tiebreakSubmitting) return;
+  if (!Number.isInteger(idx) || idx < 0 || idx >= arrowValues.length || arrowValues[idx] === null) return;
+
+  _cancelPendingScoreSubmission();
+  arrowValues[idx] = null;
+  if (ms.scoring === 'sets') {
+    ms.setArrowValues = [...arrowValues];
+  } else if (!ms._tiebreakRequired) {
+    ms.arrowValues = [...arrowValues];
+  }
+  activeArrowIndex = idx;
+  sendMatchMessage({ type: 'arrow', arrow_index: idx, value: null });
+  if (ms.scoring === 'sets') refreshSetArrowCells();
+  else {
+    refreshArrowCells();
+    updateTotalSum();
+  }
+  saveMatchState();
 }
 
 // ── Score submission ──────────────────────────────────────────────────────────
