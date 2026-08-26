@@ -173,7 +173,13 @@ function goBack() {
 
 async function _refreshMatchScene() {
   const ms = STATE.matchState;
-  if (!ms || ms.isBot || ms.id.startsWith('local-')) return;
+  if (!ms) return;
+  if (ms.isBot || ms.id.startsWith('local-')) {
+    // Bot matches are local-only and have no server status to restore. A
+    // restored bot with local input must remain usable after reload.
+    if (STATE.currentMatchId === ms.id) renderMatchScene();
+    return;
+  }
   if (ms.id === ms.challengeId) {
     _setNumpadDisabled(true);
     _setStatus('Waiting for opponent to join…');

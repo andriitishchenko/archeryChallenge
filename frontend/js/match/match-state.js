@@ -469,6 +469,14 @@ async function _fetchAndResolveMatch(matchId) {
 
 // ── Server-authoritative restore on page load ─────────────────────────────────
 
+function _hasBotRecoveryProgress(ms) {
+  const hasValue = values => Array.isArray(values)
+    && values.some(value => value !== null && value !== undefined);
+  return hasValue(ms?.arrowValues)
+    || hasValue(ms?.setArrowValues)
+    || hasValue(ms?._botShadow?.playerArrows);
+}
+
 async function restoreActiveMatchesFromServer() {
   const savedLocal = {};
   try {
@@ -515,7 +523,7 @@ async function restoreActiveMatchesFromServer() {
 
   // Keep offline bot matches
   for (const [id, ms] of Object.entries(savedLocal)) {
-    if (ms.isBot && !ms.complete && !STATE.activeMatches[id]) {
+    if (ms.isBot && !ms.complete && !STATE.activeMatches[id] && _hasBotRecoveryProgress(ms)) {
       STATE.activeMatches[id] = ms;
     }
   }
