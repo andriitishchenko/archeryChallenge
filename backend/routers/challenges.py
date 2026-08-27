@@ -44,7 +44,7 @@ def _load_challenge(challenge_id: str, db: Session) -> Challenge:
 
 
 def _validate_challenge(req: ChallengeCreate) -> None:
-    valid_distances = {"18m", "25m", "30m", "50m", "70m", "90m"}
+    valid_distances = {"18m", "25m", "30m", "50m", "60m", "70m", "90m"}
     if req.distance not in valid_distances:
         raise HTTPException(status_code=400, detail=f"Distance must be one of {valid_distances}")
     if req.scoring == ScoringEnum.total and (req.arrow_count is None or not (3 <= req.arrow_count <= 360)):

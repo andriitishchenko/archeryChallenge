@@ -1,6 +1,6 @@
 // =============================================
 // ARROWMATCH — Set-System Mode
-// 3 arrows per set → server decides winner → next set or tiebreak.
+// 3 arrows per set → server decides winner → next set or 5:5 shoot-off.
 //
 // Depends on: core/state.js, core/api.js, core/event-bus.js,
 //             match/match-state.js, match/score-input.js, match/bot.js
@@ -100,7 +100,7 @@ EventBus.on(EVENT_TYPES.WS_SET_RESOLVED, ({ matchId, set_number, scores, winner_
   }
 });
 
-// Set-system sudden death starts on the server when the sixth set is tied.
+// Set-system sudden death starts on the server when five sets finish tied.
 // The event is also needed by a player who has already left the match screen.
 EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId, scores, next_first }) => {
   const ms = STATE.activeMatches[matchId];
@@ -124,7 +124,7 @@ EventBus.on(EVENT_TYPES.WS_SET_TIEBREAK_STARTED, ({ matchId, scores, next_first 
   }
   // The event is a fast notification, while /status is authoritative. A
   // client can receive this event after a stale local set score was rendered;
-  // refresh immediately so both scoreboards show the same 6:6 state.
+  // refresh immediately so both scoreboards show the same 5:5 state.
   _fetchAndResolveMatch(matchId);
 });
 
@@ -229,9 +229,10 @@ function _resolveSetLocally(myTotal, oppTotal, setNumber, ms) {
   showToast(`Set ${setNumber}: ${myTotal} vs ${oppTotal} — ${label}`,
     winner === 'me' ? 'success' : 'info');
 
-  if (ms.setMyScore >= 6 || ms.setOppScore >= 6) {
-    if (ms.setMyScore === 6 && ms.setOppScore === 6) _startTiebreak();
-    else completeMatch(ms.setMyScore, ms.setOppScore, ms.id);
+  if (ms.setMyScore === 5 && ms.setOppScore === 5) {
+    _startTiebreak();
+  } else if (ms.setMyScore >= 6 || ms.setOppScore >= 6) {
+    completeMatch(ms.setMyScore, ms.setOppScore, ms.id);
   } else {
     _nextSet(setNumber);
   }
@@ -337,7 +338,7 @@ function _startTiebreak() {
   _setNumpadDisabled(false);
   _setStatus('');
   document.getElementById('set-progress').textContent = 'Tiebreak — sudden death';
-  showToast('Tied at 6:6! One arrow decides — highest score wins.', 'info');
+  showToast('Tied at 5:5! One arrow decides — highest score wins.', 'info');
   saveMatchState();
 }
 
@@ -363,8 +364,8 @@ async function resolveTiebreak() {
     }
     const myWins = myArrow > botArrow;
     completeMatch(
-      ms.setMyScore  + (myWins  ? 2 : 0),
-      ms.setOppScore + (!myWins ? 2 : 0),
+      ms.setMyScore  + (myWins  ? 1 : 0),
+      ms.setOppScore + (!myWins ? 1 : 0),
       ms.id,
       myWins ? 'me' : 'opponent',
       { my: myArrow, opp: botArrow },

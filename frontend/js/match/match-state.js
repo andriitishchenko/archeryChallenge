@@ -29,6 +29,9 @@ function startMatch(challenge, isCreator = false) {
     id: matchId,
     challengeId:   challenge.id,
     myName, oppName, scoring, arrowCount, dist,
+    rounds:        challenge.rounds || null,
+    arrowsPerRound: challenge.arrowsPerRound || null,
+    bowType:       challenge.bowType || challenge.bow_type || null,
     isBot:         challenge.isBot || false,
     oppSkill:      challenge.skill_level || challenge.oppSkill || null,
     arrowValues:   [],
@@ -364,7 +367,7 @@ async function _fetchAndResolveMatch(matchId) {
     const status = await api('GET', `/api/matches/${ms.id}/status`);
     if (!status) return;
     // A status request started before a scoring event may finish later than a
-    // newer request and otherwise overwrite the fresh 6:6 state.
+    // newer request and otherwise overwrite the fresh 5:5 state.
     if (ms._statusRequestSeq !== statusRequestSeq) return;
 
     const isTiebreak = status.scoring === 'tiebreak';

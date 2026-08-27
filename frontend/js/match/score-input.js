@@ -98,9 +98,8 @@ EventBus.on(EVENT_TYPES.APP_MATCH_COMPLETE, ({ wasDisplayed, myScore, oppScore, 
   if (!wasDisplayed) return;
   const decidingArrows = tiebreakArrows || matchState?._tiebreakArrows || null;
 
-  // Bot finalisation can adjust the live preview to the final target total.
-  // Render that exact array again so the displayed arrows and result cannot
-  // disagree after the match completes.
+  // Render the exact bot array used for the result so the displayed arrows and
+  // result cannot disagree after the match completes.
   if (matchState?.isBot && Array.isArray(matchState._botFinalArrows)) {
     if (matchState.scoring === 'sets' && !matchState._tiebreak) {
       _showOppSetLive(matchState.oppName, matchState._botFinalArrows, matchState);

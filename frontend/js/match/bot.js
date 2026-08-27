@@ -27,6 +27,21 @@ const BOT_RESULT_SPREAD = {
   Master:    1.6,
 };
 
+const BOT_MATCH_RULES = {
+  // Compound target rounds use five ends of three arrows.
+  Compound: { scoring: 'total', arrowCount: 15, rounds: 5, arrowsPerRound: 3 },
+  // Recurve target matches use set scoring and a 5:5 shoot-off.
+  Recurve:  { scoring: 'sets',  arrowCount: 3,  rounds: 5, arrowsPerRound: 3 },
+};
+
+function getBotMatchSettings() {
+  const bowType = STATE.profile?.bowType || 'Recurve';
+  return {
+    ...(BOT_MATCH_RULES[bowType] || { scoring: 'total', arrowCount: STATE.arrowCount || 18 }),
+    bowType,
+  };
+}
+
 function genBotArrow(skill) {
   const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);
@@ -193,13 +208,13 @@ function botShadowFinalize(ms, userTotal, count) {
 
 function generateBotOpponent() {
   const names = ['BotArcher_Theta', 'AutoNock_7', 'RoboRelease', 'CyberBow_X'];
+  const matchSettings = getBotMatchSettings();
   return {
     id:         `bot-${Date.now()}`,
     name:       names[Math.floor(Math.random() * names.length)],
     isBot:      true,
     distance:   '30m',
-    scoring:    'total',
-    arrowCount: STATE.arrowCount,
+    ...matchSettings,
     type:       'live',
   };
 }
@@ -213,7 +228,7 @@ function generateMockChallenges() {
   const bows   = ['Recurve', 'Compound', 'Barebow'];
   const skills = ['Beginner', 'Skilled', 'Master'];
   const ages   = ['18–20', '21–49', '50+'];
-  const dists  = ['18m', '30m', '50m', '70m'];
+  const dists  = ['18m', '25m', '30m', '50m', '60m', '70m', '90m'];
   const msgs   = ['Looking for a friendly match!', 'Come test your skills!', '', 'Recurve archers welcome', ''];
   return Array.from({ length: 6 }, (_, i) => ({
     id:                  `mock-${i}`,
@@ -222,7 +237,7 @@ function generateMockChallenges() {
     creator_age:         ages[i % 3],
     creator_bow_type:    bows[i % 3],
     creator_skill_level: skills[i % 3],
-    distance:            dists[i % 4],
+    distance:            dists[i % dists.length],
     invite_message:      msgs[i % msgs.length],
     type:                i % 2 === 0 ? 'live' : 'async',
     created_at:          new Date(Date.now() - i * 180000).toISOString(),

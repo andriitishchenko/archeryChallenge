@@ -262,6 +262,7 @@
                 <button class="chip active" data-filter="dist" data-val="25m" onclick="toggleFilter(this)">25m</button>
                 <button class="chip active" data-filter="dist" data-val="30m" onclick="toggleFilter(this)">30m</button>
                 <button class="chip active" data-filter="dist" data-val="50m" onclick="toggleFilter(this)">50m</button>
+                <button class="chip active" data-filter="dist" data-val="60m" onclick="toggleFilter(this)">60m</button>
                 <button class="chip active" data-filter="dist" data-val="70m" onclick="toggleFilter(this)">70m</button>
                 <button class="chip active" data-filter="dist" data-val="90m" onclick="toggleFilter(this)">90m</button>
               </div>
@@ -324,6 +325,7 @@
             <button class="chip" onclick="selectChip(this,'dist')">25m</button>
             <button class="chip active" onclick="selectChip(this,'dist')">30m</button>
             <button class="chip" onclick="selectChip(this,'dist')">50m</button>
+            <button class="chip" onclick="selectChip(this,'dist')">60m</button>
             <button class="chip" onclick="selectChip(this,'dist')">70m</button>
             <button class="chip" onclick="selectChip(this,'dist')">90m</button>
           </div>
@@ -348,8 +350,8 @@
           <div id="scoring-sets-opts" class="scoring-opts mt-sm hidden">
             <div class="rules-box">
               <p>3 arrows per set · 2pts win · 1pt tie</p>
-              <p>First to 6 points wins</p>
-              <p>Shoot-off on tie (1 arrow, nearest center)</p>
+              <p>First to 6 set points wins · 3–5 sets</p>
+              <p>Shoot-off at 5:5 (1 arrow, highest score)</p>
             </div>
           </div>
         </div>
@@ -559,7 +561,7 @@
 
   <!-- Layer 1: Foundation -->
   <script src="/static/js/core/event-bus.js"></script>
-  <script src="/static/js/core/state.js"></script>
+  <script src="/static/js/core/state.js?v=20260827-1"></script>
   <script src="/static/js/core/api.js"></script>
   <script src="/static/js/core/utils.js"></script>
   <script src="/static/js/core/ws.js"></script>
@@ -567,20 +569,20 @@
   <!-- Layer 2: Bot / mock data -->
   <!-- Bump the query string when bot helpers change so an older cached bot.js
        cannot be paired with score-input.js that calls the shadow API. -->
-  <script src="/static/js/match/bot.js?v=20260827-3"></script>
+  <script src="/static/js/match/bot.js?v=20260827-4"></script>
 
   <!-- Layer 3: Match state manager -->
-  <script src="/static/js/match/match-state.js?v=20260827-2"></script>
+  <script src="/static/js/match/match-state.js?v=20260827-3"></script>
 
   <!-- Layer 4: Scoring UI -->
-  <script src="/static/js/match/score-input.js?v=20260827-2"></script>
+  <script src="/static/js/match/score-input.js?v=20260827-3"></script>
   <script src="/static/js/match/total-mode.js?v=20260827-3"></script>
-  <script src="/static/js/match/set-mode.js"></script>
+  <script src="/static/js/match/set-mode.js?v=20260827-1"></script>
 
   <!-- Layer 5: Screen modules -->
   <script src="/static/js/screens/auth.js"></script>
   <script src="/static/js/screens/settings.js"></script>
-  <script src="/static/js/screens/challenges.js"></script>
+  <script src="/static/js/screens/challenges.js?v=20260827-1"></script>
   <script src="/static/js/screens/history.js?v=20260827-1"></script>
 
   <!-- Layer 6: Bootstrap -->

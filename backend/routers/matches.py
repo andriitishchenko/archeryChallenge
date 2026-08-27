@@ -85,7 +85,7 @@ def _last_resolved_set(match: Match, db: Session) -> int:
 
 
 def _set_tiebreak_active(match: Match, db: Session) -> bool:
-    """Set-system sudden death starts at an active 6:6 set-point score."""
+    """Set-system sudden death starts at an active 5:5 set-point score."""
     if (
         match.status == "complete"
         or not match.challenge
@@ -97,7 +97,7 @@ def _set_tiebreak_active(match: Match, db: Session) -> bool:
         return False
     # Use the stored points, not a raw ArrowScore aggregation: a race can
     # persist both current-set rows before either request applies their points.
-    return participants[0].final_score == 6 and participants[1].final_score == 6
+    return participants[0].final_score == 5 and participants[1].final_score == 5
 
 
 def _reconcile_ready_set_tiebreak(
@@ -137,7 +137,10 @@ def _reconcile_ready_set_tiebreak(
 
     me.result = MatchResultEnum.win if my_total > opp_total else MatchResultEnum.loss
     opp.result = MatchResultEnum.loss if my_total > opp_total else MatchResultEnum.win
-    me.final_score = opp.final_score = 6
+    if my_total > opp_total:
+        me.final_score, opp.final_score = 6, 5
+    else:
+        me.final_score, opp.final_score = 5, 6
     match.status = "complete"
     match.completed_at = datetime.utcnow()
     db.commit()
@@ -181,7 +184,7 @@ def _reconcile_ready_set(
         opp.final_score = count_set_points(opp, match.id, db)
         match.first_to_act = next_first
 
-        # A tied 6:6 set is intentionally left active; status serialization
+        # A tied 5:5 score is intentionally left active; status serialization
         # will expose the set-system sudden-death state on the next response.
         if me.final_score >= 6 or opp.final_score >= 6:
             if me.final_score != opp.final_score:
@@ -214,7 +217,7 @@ async def submit_set(
     World Archery Gold round rules:
       - Win → 2 pts · Draw → 1 pt each · Loss → 0 pts
       - First to 6 pts wins the match
-      - At 6:6 → sudden-death (set_number=0): highest single arrow wins; repeat if equal
+      - At 5:5 → sudden-death (set_number=0): highest single arrow wins; repeat if equal
       - Loser of a set shoots first next set; draw keeps same order
     """
     match     = load_match(match_id, db)
@@ -316,7 +319,7 @@ async def submit_set(
             return SetResult(
                 set_number=0, both_submitted=False,
                 my_set_total=sum(sub.arrows), opp_set_total=None,
-                set_winner=None, my_set_points=6, opp_set_points=6,
+                set_winner=None, my_set_points=5, opp_set_points=5,
                 match_complete=False, match_winner=None, match_result=None,
                 tiebreak_required=True, next_first_to_act=match.first_to_act,
                 judge_status=f"Tiebreak: your arrow recorded — waiting for {opp_name}…",
@@ -335,8 +338,8 @@ async def submit_set(
                 "match_id": match.id,
                 "set_number": 0,
                 "scores": {
-                    current_user.id: {"total": my_total, "pts": 6},
-                    opp.user_id: {"total": opp_total, "pts": 6},
+                    current_user.id: {"total": my_total, "pts": 5},
+                    opp.user_id: {"total": opp_total, "pts": 5},
                 },
                 "next_first": match.first_to_act,
                 "round_tied": True,
@@ -344,7 +347,7 @@ async def submit_set(
             return SetResult(
                 set_number=0, both_submitted=True,
                 my_set_total=my_total, opp_set_total=opp_total,
-                set_winner="draw", my_set_points=6, opp_set_points=6,
+                set_winner="draw", my_set_points=5, opp_set_points=5,
                 match_complete=False, match_winner=None, match_result=None,
                 tiebreak_required=True, next_first_to_act=match.first_to_act,
                 judge_status="Tiebreak arrows tied — shoot one more arrow each.",
@@ -353,7 +356,10 @@ async def submit_set(
         match_winner = "me" if my_total > opp_total else "opponent"
         me.result = MatchResultEnum.win if match_winner == "me" else MatchResultEnum.loss
         opp.result = MatchResultEnum.loss if match_winner == "me" else MatchResultEnum.win
-        me.final_score = opp.final_score = 6
+        if match_winner == "me":
+            me.final_score, opp.final_score = 6, 5
+        else:
+            me.final_score, opp.final_score = 5, 6
         match.status = "complete"
         match.completed_at = datetime.utcnow()
         db.commit()
@@ -364,7 +370,7 @@ async def submit_set(
             set_number=0, both_submitted=True,
             my_set_total=my_total, opp_set_total=opp_total,
             set_winner="me" if match_winner == "me" else "opponent",
-            my_set_points=6, opp_set_points=6,
+            my_set_points=me.final_score, opp_set_points=opp.final_score,
             match_complete=True, match_winner=match_winner, match_result=match_winner,
             tiebreak_required=False, next_first_to_act=None,
             judge_status=(
@@ -440,38 +446,36 @@ async def submit_set(
     opp.final_score = new_opp_pts
     match.first_to_act = next_first
 
-    match_complete = new_my_pts >= 6 or new_opp_pts >= 6
-    match_winner   = None
-    tiebreak       = False
+    match_winner = None
+    # A match reaches shoot-off after five drawn sets (5:5). Keep the
+    # >=6 guard for old/inconsistent rows that may already contain 6:6.
+    tiebreak = new_my_pts == new_opp_pts and new_my_pts >= 5
+    match_complete = (new_my_pts >= 6 or new_opp_pts >= 6) and not tiebreak
 
     if match_complete:
         if new_my_pts > new_opp_pts:
             match_winner, me.result, opp.result = "me",       MatchResultEnum.win,  MatchResultEnum.loss
             judge = f"Match complete — {my_name} wins {new_my_pts}:{new_opp_pts}!"
-        elif new_opp_pts > new_my_pts:
+        else:
             match_winner, me.result, opp.result = "opponent", MatchResultEnum.loss, MatchResultEnum.win
             judge = f"Match complete — {opp_name} wins {new_opp_pts}:{new_my_pts}"
-        else:
-            tiebreak, match_complete = True, False
-            judge = "Scores level at 6:6 — sudden-death arrow! One arrow each, highest wins."
-
-        if not tiebreak:
-            match.status       = "complete"
-            match.completed_at = datetime.utcnow()
-            winner_uid = current_user.id if match_winner == "me" else opp.user_id
-            asyncio.create_task(manager.notify_match_all(match_id, {
-                "type": "match_complete", "match_id": match_id, "winner_id": winner_uid,
-            }))
-        else:
-            asyncio.create_task(manager.notify_match_all(match_id, {
-                "type": "set_tiebreak_started", "match_id": match_id,
-                "set_number": sub.set_number,
-                "scores": {
-                    current_user.id: {"total": my_total, "pts": new_my_pts},
-                    opp.user_id: {"total": opp_total, "pts": new_opp_pts},
-                },
-                "next_first": next_first,
-            }))
+        match.status       = "complete"
+        match.completed_at = datetime.utcnow()
+        winner_uid = current_user.id if match_winner == "me" else opp.user_id
+        asyncio.create_task(manager.notify_match_all(match_id, {
+            "type": "match_complete", "match_id": match_id, "winner_id": winner_uid,
+        }))
+    elif tiebreak:
+        judge = "Scores level at 5:5 — sudden-death arrow! One arrow each, highest wins."
+        asyncio.create_task(manager.notify_match_all(match_id, {
+            "type": "set_tiebreak_started", "match_id": match_id,
+            "set_number": sub.set_number,
+            "scores": {
+                current_user.id: {"total": my_total, "pts": new_my_pts},
+                opp.user_id: {"total": opp_total, "pts": new_opp_pts},
+            },
+            "next_first": next_first,
+        }))
     else:
         if set_winner == "me":
             set_label = f"{my_name} wins this set!"
@@ -694,18 +698,25 @@ def get_match_status(
     tiebreak_req = tb_match is not None and tb_match.status != "complete"
     set_points_my = count_set_points(me, match.id, db) if scoring == "sets" else 0
     set_points_opp = count_set_points(opp, match.id, db) if (scoring == "sets" and opp) else 0
+    has_set_tiebreak_arrows = bool(
+        scoring == "sets"
+        and db.query(ArrowScore).filter(
+            ArrowScore.participant_id == me.id,
+            ArrowScore.set_number == 0,
+        ).first()
+    )
     set_tiebreak = (
         scoring == "sets"
-        and set_points_my == 6
-        and set_points_opp == 6
         and (
-            match.status != "complete"
-            or db.query(ArrowScore).filter(
-                ArrowScore.participant_id == me.id,
-                ArrowScore.set_number == 0,
-            ).first() is not None
+            (set_points_my == 5 and set_points_opp == 5)
+            or has_set_tiebreak_arrows
         )
     )
+    if scoring == "sets" and match.status == "complete" and has_set_tiebreak_arrows:
+        # The shoot-off awards the winning archer the sixth set point while
+        # the stored regular-set totals remain 5:5.
+        set_points_my = me.final_score or set_points_my
+        set_points_opp = opp.final_score if opp else set_points_opp
 
     sets_out    = []
     current_set = 1
@@ -741,8 +752,8 @@ def get_match_status(
 
     opp_name = get_profile_name(opp.user_id, db) if opp else "Opponent"
     judge = (
-        "Scores tied at 6:6 — sudden-death! Shoot one arrow each."
-        if set_tiebreak
+        "Scores tied at 5:5 — sudden-death! Shoot one arrow each."
+        if set_tiebreak and match.status != "complete"
         else build_judge_status(match, me, opp, scoring, current_set, tiebreak_req, opp_name, current_user.id)
     )
 

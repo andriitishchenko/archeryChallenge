@@ -34,7 +34,7 @@ const STATE = {
     skill:   ['Beginner', 'Skilled', 'Master'],
     gender:  ['Male', 'Female'],
     bow:     ['Recurve', 'Compound', 'Barebow'],
-    dist:    ['18m', '25m', '30m', '50m', '70m', '90m'],
+    dist:    ['18m', '25m', '30m', '50m', '60m', '70m', '90m'],
     country: ''
   }
 };

@@ -48,13 +48,15 @@ EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent, is_bot }) => {
   const btn      = document.querySelector('.find-btn');
   if (statusEl) statusEl.textContent = '';
   if (btn) { btn.disabled = false; btn.textContent = 'Find Opponent'; }
+  const matchSettings = is_bot
+    ? getBotMatchSettings()
+    : { scoring: 'total', arrowCount: STATE.arrowCount };
   startMatch({
     id:         match_id,
     matchId:    match_id,
     name:       opponent?.name || 'Opponent',
     distance:   STATE.profile?.preferredDist || '30m',
-    scoring:    'total',
-    arrowCount: STATE.arrowCount,
+    ...matchSettings,
     skill_level: opponent?.skill_level,
     isBot:      is_bot === true,
   });
@@ -601,7 +603,7 @@ function updateFilterBadge() {
     STATE.filters.skill.length  === 3 &&
     STATE.filters.gender.length === 2 &&
     STATE.filters.bow.length    === 3 &&
-    STATE.filters.dist.length   === 6 &&
+    STATE.filters.dist.length   === 7 &&
     !STATE.filters.country;
   document.getElementById('filter-badge').textContent = allSelected ? 'All' : 'Active';
 }
