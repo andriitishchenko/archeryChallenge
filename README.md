@@ -50,6 +50,15 @@ source venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+For a server deployment where several projects should share one dependency installation, use the root-level `start_server.sh`:
+
+```bash
+chmod +x start_server.sh
+./start_server.sh
+```
+
+The script installs `backend/requirements.txt` into the current user's Python user-site with `python3 -m pip install --user`, then starts Uvicorn without creating a project-local virtual environment. Set `IP`, `PORT`, `WORKERS`, or `PYTHON_BIN` in the environment to override the defaults. A system-wide installation for all server users requires running pip with administrative privileges; the script intentionally uses the safer per-user shared installation.
+
 The SQLite database defaults to `backend/arrowmatch.db` because the server is started from `backend/`. Do not commit local database files.
 
 ## Configuration

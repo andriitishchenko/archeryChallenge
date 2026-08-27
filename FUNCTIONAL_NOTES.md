@@ -34,6 +34,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 
 ### Startup and persistence
 
+- `start_server.sh` → installs the backend requirements into the current user's shared Python user-site and starts Uvicorn from `backend/` → multiple projects owned by that user can reuse the installed modules without creating a project-local virtual environment.
 - App startup → creates the database schema if missing, checks `SCHEMA_VERSION`, and starts the expiry worker → an older schema is currently recreated from scratch.
 - `POST /api/guest` → creates a guest user and returns access/refresh JWTs → the guest can enter gameplay without an account.
 - Server restart → active match participants can be rebuilt from database rows when needed → WebSocket routing does not rely only on in-memory state.
