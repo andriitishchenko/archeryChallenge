@@ -53,6 +53,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 ### Challenges
 
 - Public challenge list → returns active public challenges and excludes the current user's own challenges → profile, bow, distance (18m, 25m, 30m, 50m, 60m, 70m, or 90m), and country filters are applied.
+- Opening the new-challenge form → selects defaults from the current bow profile → Compound starts with total scoring at 15 arrows (5 rounds × 3), while Recurve starts with Set System scoring and 3 arrows per set.
 - Create a public challenge → persists it and broadcasts `new_challenge` → connected users can refresh the list without polling for creation.
 - Join a challenge → creates an active match with both participants, deactivates the challenge, and notifies the creator with `opponent_joined` → a user cannot join their own or expired challenge.
 - Join a challenge or propose/accept a rematch → the server counts each participant's unfinished parent matches → the operation returns HTTP 409 at 10 open matches per user; an automatic tiebreak child does not consume an additional slot.
@@ -69,6 +70,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 - Final arrow entered → client waits 600 ms before automatic submission and keeps DEL enabled → the player can correct the last input before the score is sent.
 - Double-tap on an entered arrow or press DEL → client clears that arrow, restores it as the active input, and sends a null live-preview update → the value is removed locally and is not submitted while the correction window is active.
 - Total-score submission → stores the player's arrow values and waits for the opponent → the server resolves win/loss when both scores exist.
+- Bot score submission → bypasses the human challenge-join guard → the local bot resolves the submitted total or set instead of leaving the player on “Waiting for opponent to join…”.
 - Equal total scores → keeps the parent match unresolved and starts a tiebreak child match → tiebreak data is linked to the parent match.
 - One tiebreak arrow submitted while the opponent is still pending → keeps the submitted arrow visible and locks the input → a new arrow is requested only after both players submit equal values.
 - Page reload during a total-score tiebreak → `/api/matches/{id}/status` returns the active tiebreak stage and child ID, then the frontend renders the restored state → the one-arrow sudden-death UI is preserved instead of returning to the parent match's original arrow count.

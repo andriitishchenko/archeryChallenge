@@ -158,7 +158,7 @@ EventBus.on(EVENT_TYPES.WS_OPP_TIEBREAK_DONE, ({ matchId }) => {
 async function resolveSet() {
   const ms = STATE.matchState;
   if (!ms || ms._setSubmitting) return;
-  if (ms.id === ms.challengeId) {
+  if (!ms.isBot && ms.id === ms.challengeId) {
     _setStatus('Waiting for opponent to join before you can submit…');
     return;
   }

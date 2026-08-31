@@ -229,6 +229,20 @@ function selectScoring(btn) {
   document.getElementById('scoring-sets-opts').classList.toggle('hidden',  STATE.currentScoring !== 'sets');
 }
 
+function applyDefaultMatchSettings() {
+  const settings = getBotMatchSettings();
+  STATE.currentScoring = settings.scoring;
+  STATE.arrowCount = settings.arrowCount;
+
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.scoring === settings.scoring);
+  });
+  document.getElementById('scoring-total-opts')?.classList.toggle('hidden', settings.scoring !== 'total');
+  document.getElementById('scoring-sets-opts')?.classList.toggle('hidden', settings.scoring !== 'sets');
+  const arrowsEl = document.getElementById('arrows-count');
+  if (arrowsEl) arrowsEl.textContent = settings.arrowCount;
+}
+
 function changeArrows(delta) {
   STATE.arrowCount = Math.max(3, Math.min(36, STATE.arrowCount + delta));
   document.getElementById('arrows-count').textContent = STATE.arrowCount;
