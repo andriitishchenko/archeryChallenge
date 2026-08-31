@@ -520,7 +520,7 @@ function deleteCell(idx) {
 async function _submitScoreToServer(arrows) {
   const ms = STATE.matchState;
   if (!ms?.id || ms.isBot) return true;
-  if (ms.id === ms.challengeId) {
+  if (!ms.isBot && ms.id === ms.challengeId) {
     _setStatus('Waiting for opponent to join…');
     _setNumpadDisabled(false);
     return null;

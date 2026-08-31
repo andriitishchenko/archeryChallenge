@@ -160,7 +160,10 @@ function showScene(name) {
   EventBus.emit(EVENT_TYPES.APP_SCENE_CHANGE, { scene: name });
 
   if (name === 'settings')       refreshSettings();
-  if (name === 'new-challenge')  updateDeadlineVisibility();
+  if (name === 'new-challenge')  {
+    applyDefaultMatchSettings();
+    updateDeadlineVisibility();
+  }
   if (name === 'challenge')      _refreshMatchScene();
   if (name === 'history')        refreshHistory();
 

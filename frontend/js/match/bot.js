@@ -34,12 +34,15 @@ const BOT_MATCH_RULES = {
   Recurve:  { scoring: 'sets',  arrowCount: 3,  rounds: 5, arrowsPerRound: 3 },
 };
 
-function getBotMatchSettings() {
-  const bowType = STATE.profile?.bowType || 'Recurve';
+function getMatchSettingsForBow(bowType, fallbackArrowCount = 18) {
   return {
-    ...(BOT_MATCH_RULES[bowType] || { scoring: 'total', arrowCount: STATE.arrowCount || 18 }),
-    bowType,
+    ...(BOT_MATCH_RULES[bowType] || { scoring: 'total', arrowCount: fallbackArrowCount }),
+    bowType: bowType || 'Recurve',
   };
+}
+
+function getBotMatchSettings() {
+  return getMatchSettingsForBow(STATE.profile?.bowType || 'Recurve', STATE.arrowCount || 18);
 }
 
 function genBotArrow(skill) {
