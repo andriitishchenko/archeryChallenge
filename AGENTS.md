@@ -21,15 +21,19 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Never delete the `main` branch.
 - Never delete, rewrite, reset, or force-update history already present on `main`.
 
-## Requirements are part of the implementation
+## Documentation and project memory
 
-- Read `FUNCTIONAL_NOTES.md` before changing an existing feature.
-- Treat `FUNCTIONAL_NOTES.md` as the ledger of verified, implemented behavior.
-- Whenever a change affects user-visible behavior, automatic behavior, persistence, recovery, API validation, WebSocket events, state transitions, or fallback paths, update the relevant note in the same change.
-- Use the format `Trigger → automatic behavior → result/guard` and keep entries factual.
-- Update the status snapshot when a feature changes between `Implemented`, `Partial`, and `Planned`.
-- Keep planned requirements in `app_spec.txt`; do not mark a feature implemented without code-level evidence.
-- A code change is incomplete until its functional documentation and affected API/event documentation are synchronized.
+- Write project documentation in English.
+- Before work, read this file, `README.md`, relevant docs, the source/configuration involved, and `git status --short`. Read `CLAUDE.md`, `FUNCTIONAL_NOTES.md`, and `app_spec.txt` when relevant to the task.
+- Treat source code and configuration as the authority when they conflict with documentation. Verify the difference and update the affected documentation in the same task; keep intended future behavior in `app_spec.txt`.
+- Before fixing a bug or implementing a feature, add or update its expected behavior in the relevant `DOCS/behavior/` component record. After the work, update its status, regression coverage, and remaining limits based on evidence.
+- For bugs and features that can be covered by tests, add or update regression tests using the repository's existing test infrastructure. Do not invent or introduce a test framework just to satisfy documentation.
+- After significant changes to behavior, architecture, components, commands, dependencies, or constraints, synchronize the canonical documentation in the same task.
+- Before adding a fact to documentation, search for an existing canonical home. Keep each fact in one canonical place and link to it instead of copying it elsewhere.
+- Keep durable architecture decisions and constraints in `DOCS/decisions/`, separate from behavior records.
+- Do not turn documentation into a change log. Exclude changed-file lists, dates, temporary paths, routine build results, and details recoverable from Git.
+- Document only facts confirmed in current code/configuration. Do not invent components, commands, tests, limits, or behavior. Never record secrets, tokens, keys, or user data.
+- Before handoff, check documentation links and current accuracy, run `git diff --check`, and review the final diff.
 
 ## Safe change workflow
 
@@ -47,4 +51,4 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Pre-existing or unrelated worktree changes must remain untouched and outside the automatic commit; report them separately if present.
 - Keep unrelated pre-existing changes out of the automatic commit.
 
-For the repository architecture, commands, and detailed conventions, read `CLAUDE.md` and `README.md`.
+For project overview and setup, read `README.md`. Architecture and durable constraints live in `DOCS/architecture.md` and `DOCS/decisions/`; implemented behavior lives in `DOCS/behavior/`. `FUNCTIONAL_NOTES.md` is the status index, and `app_spec.txt` is the requirements source for planned scope. `CLAUDE.md` adds coding conventions and high-risk implementation contracts.
