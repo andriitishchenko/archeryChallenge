@@ -45,6 +45,17 @@ function getBotMatchSettings() {
   return getMatchSettingsForBow(STATE.profile?.bowType || 'Recurve', STATE.arrowCount || 18);
 }
 
+function getQuickMatchSettings(opponentBowType) {
+  const playerBowType = STATE.profile?.bowType || 'Recurve';
+  if (opponentBowType && opponentBowType !== playerBowType) {
+    // Matchmaking may pair different bow types. Both clients see the same two
+    // profiles, so use one shared ruleset instead of deriving different rules
+    // from each player's local profile or previous form state.
+    return { scoring: 'total', arrowCount: 18, bowType: null };
+  }
+  return getMatchSettingsForBow(playerBowType, 18);
+}
+
 function genBotArrow(skill) {
   const { mean, dev } = BOT_SKILL[skill] || BOT_SKILL['Skilled'];
   const v = Math.round(mean + (Math.random() * 2 - 1) * dev * 2);

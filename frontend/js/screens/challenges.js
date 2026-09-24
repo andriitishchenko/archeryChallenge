@@ -50,7 +50,7 @@ EventBus.on(EVENT_TYPES.WS_MM_MATCHED, ({ match_id, opponent, is_bot }) => {
   if (btn) { btn.disabled = false; btn.textContent = 'Find Opponent'; }
   const matchSettings = is_bot
     ? getBotMatchSettings()
-    : { scoring: 'total', arrowCount: STATE.arrowCount };
+    : getQuickMatchSettings(opponent?.bow_type || opponent?.bowType);
   startMatch({
     id:         match_id,
     matchId:    match_id,

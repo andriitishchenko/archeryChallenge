@@ -88,6 +88,7 @@ Keep notes short and factual. Update this file in the same change whenever a rou
 ### Matchmaking and rematch
 
 - Matchmaking request → replaces any previous request for the same user and searches compatible queued profiles → if no human match is found after `BOT_WAIT_SECONDS`, one bot fallback event is emitted with `is_bot=true` and the client starts a non-persisted bot match.
+- Quick Find match → both clients derive the same scoring rules from the two matched bow profiles → matching bow types use that bow's defaults, while mixed bow types use total scoring with 18 arrows so both clients stay in sync.
 - Offline notification → queues up to 50 messages per user → queued messages flush when that user reconnects.
 - Rematch proposal → creates a private waiting rematch match and notifies the opponent with the original match ID → duplicate proposals are rejected and the client can associate the request with the correct completed match.
 - Rematch accept/decline → accepts either the waiting rematch ID or the original completed match ID → both sides receive the corresponding event, the accepted foreground rematch opens on the challenge screen, the declined match is removed, and the original match can be rematched again.
