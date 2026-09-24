@@ -4,18 +4,21 @@ ArrowMatch is a mobile-first, real-time archery challenge platform. Players can 
 
 ## Documentation map
 
-- `README.md` — setup, architecture, API surface, and verification commands.
-- `AGENTS.md` — shared rules for all coding and review agents.
-- `CLAUDE.md` — rules and workflow for coding agents.
-- `FUNCTIONAL_NOTES.md` — short ledger of implemented and automatic behavior; update it with behavior changes.
-- `app_spec.txt` — product requirements and intended scope; use it for new features.
+- [`AGENTS.md`](AGENTS.md) — required workflow and documentation maintenance rules for agents.
+- [`CLAUDE.md`](CLAUDE.md) — repository-specific coding conventions and checks.
+- [`DOCS/architecture.md`](DOCS/architecture.md) — current components and data/control flow.
+- [`DOCS/behavior/README.md`](DOCS/behavior/README.md) — behavior record format and index.
+- [`DOCS/decisions/architecture.md`](DOCS/decisions/architecture.md) — durable architecture decisions and constraints.
+- [`FUNCTIONAL_NOTES.md`](FUNCTIONAL_NOTES.md) — status snapshot linking to implemented behavior records.
+- [`app_spec.txt`](app_spec.txt) — product requirements and intended scope; use it for planned features.
+- This README — setup, configuration, API/WebSocket overview, and verification commands.
 - `read.txt` — legacy compatibility pointer; do not add new project documentation there.
 
-When requirements and implementation differ, treat the user request as authoritative, use `app_spec.txt` for the desired behavior, and inspect the code before changing an existing contract.
+When requirements and implementation differ, treat the user request as authoritative for intended changes, use `app_spec.txt` for planned behavior, and inspect code/configuration to establish current behavior before changing an existing contract.
 
-Before modifying or removing a feature, check `FUNCTIONAL_NOTES.md` for its automatic side effects and dependent flows.
+Before modifying or removing a feature, check its linked `DOCS/behavior/` record for automatic side effects and dependent flows.
 
-The current implementation status is recorded in the status snapshot at the top of `FUNCTIONAL_NOTES.md`; `app_spec.txt` describes desired scope, not completion status.
+The current implementation status is recorded in `FUNCTIONAL_NOTES.md`; `app_spec.txt` describes desired scope, not completion status.
 
 ## Stack
 
@@ -25,7 +28,7 @@ The current implementation status is recorded in the status snapshot at the top 
 | Database | SQLite by default; PostgreSQL via `DATABASE_URL` |
 | Authentication | JWT access/refresh tokens, bcrypt password hashing |
 | Realtime | One authenticated WebSocket per user at `/ws/user` |
-| Frontend | Vanilla JavaScript and CSS; no build step or framework |
+| Frontend | Classic vanilla JavaScript scripts and CSS; no build step or framework |
 | Serving | FastAPI serves `/` and frontend assets under `/static` |
 
 ## Run locally
@@ -86,37 +89,11 @@ Set variables in `backend/.env` or the process environment. Settings are read wh
 | `EXPIRY_CHECK_INTERVAL_SECONDS` | `60` | Expiry worker interval |
 | `MATCH_INACTIVITY_SECONDS` | `172800` | Inactivity threshold; 48 hours by default |
 
-Database startup uses a schema-version guard. If the stored version is older than `SCHEMA_VERSION`, the current implementation drops and recreates all tables. This is a development reset mechanism, not a production migration strategy.
+The database startup reset constraint is documented in [architecture decisions](DOCS/decisions/architecture.md).
 
 ## Architecture
 
-```text
-HTTP/WebSocket request
-        |
-        v
-routers/  ->  services/  ->  SQLAlchemy models/database
-    |             |
-    +------ WebSocket manager notifications
-
-WebSocket -> frontend/core/ws.js -> EventBus -> state/match/screen modules -> DOM
-```
-
-Backend responsibilities:
-
-- `backend/main.py` creates the FastAPI app, mounts routers, serves the SPA, and starts expiry processing.
-- `backend/routers/` exposes HTTP endpoints and performs request-level authorization.
-- `backend/services/` contains shared match, tiebreak, and challenge serialization logic.
-- `backend/ws/` owns the single-user socket and matchmaking notifications.
-- `backend/models/` defines the schema and startup schema-version behavior.
-
-Frontend responsibilities:
-
-- `frontend/index.html` defines the SPA shell and script load order.
-- `frontend/js/core/` owns shared state, API requests, WebSocket routing, and events.
-- `frontend/js/match/` owns match state and scoring modes; `score-input.js` is the DOM-facing match renderer.
-- `frontend/js/screens/` owns auth, settings, challenges, and history screens.
-
-Persisted match and challenge state is authoritative on the server. `STATE` and `localStorage` are client-side session/cache state and must not replace backend validation. When no human opponent is available, the frontend uses a local shadow-bot fallback that is not persisted or submitted to the server.
+See [current architecture](DOCS/architecture.md) for component responsibilities, request/event flow, and state ownership. Durable architecture constraints are maintained separately in [architecture decisions](DOCS/decisions/architecture.md).
 
 ## API surface
 
