@@ -10,6 +10,7 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Use the `codex/<short-task-name>` prefix by default.
 - Preserve pre-existing changes; do not silently include unrelated work in a task commit.
 - Do not merge task branches into `master` or `main` unless the user explicitly asks. The user handles merges by default.
+- After a task branch is merged, delete that local task branch when safe. Also clean up other clearly identified, fully merged `codex/*` task branches when practical; do not delete unrelated branches.
 
 ## Mandatory task lifecycle
 
@@ -17,7 +18,7 @@ These rules apply to every coding, review, and maintenance agent working in this
 - Run every test explicitly specified by the task; when no tests are specified, run the narrowest relevant checks and record what was verified.
 - Run regression testing for the affected area and confirm that existing functionality still passes.
 - Commit task changes after checks pass, keeping unrelated worktree changes out of the commit.
-- Do not merge or delete task branches unless the user explicitly asks.
+- Do not merge task branches unless the user explicitly asks. Delete a task branch only after confirming its changes are merged.
 - Never delete the `main` branch.
 - Never delete, rewrite, reset, or force-update history already present on `main`.
 
