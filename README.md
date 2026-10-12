@@ -129,14 +129,24 @@ Password recovery uses a one-time, expiring link rather than sending a password 
 
 ## Verification
 
-There is currently no committed automated test suite. Before handing off a change:
+Targeted backend regression tests use Python's standard `unittest` runner and an in-memory SQLite database:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m unittest discover -s tests -v
+cd ..
+node --test frontend/tests/*.test.js
+```
+
+Before handing off a change, also run:
 
 ```bash
 python3 -m compileall backend
 git diff --check
 ```
 
-For behavior changes, run the server and exercise the affected flow through the UI. Check `/health`, browser console errors, network responses, authentication boundaries, and persistence after a page refresh. If a change affects a database or WebSocket contract, test both sides of that contract.
+The committed tests cover selected auth, scoring, match-state, and rematch rules; they do not replace browser, full API, or live WebSocket verification. For user-facing behavior changes, run the server and exercise the affected flow through the UI. Check `/health`, browser console errors, network responses, authentication boundaries, and persistence after a page refresh. If a change affects a database or WebSocket contract, test both sides of that contract.
 
 ## Security and operations notes
 

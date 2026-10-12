@@ -57,6 +57,16 @@ class SetResult(BaseModel):
 class ScoreSubmission(BaseModel):
     arrows: List[ArrowScoreItem]
 
+    @field_validator("arrows")
+    @classmethod
+    def unique_nonempty_series(cls, v: List[ArrowScoreItem]) -> List[ArrowScoreItem]:
+        if not v:
+            raise ValueError("At least one arrow score is required")
+        indexes = [arrow.arrow_index for arrow in v]
+        if len(indexes) != len(set(indexes)):
+            raise ValueError("Arrow indices must be unique")
+        return v
+
 
 class MatchStatusOut(BaseModel):
     id:                 str

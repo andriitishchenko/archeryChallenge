@@ -231,10 +231,11 @@ async def submit_set(
             match     = tb_child
             challenge = match.challenge
 
+    me  = get_participant(match, current_user.id)
+    opp = get_opponent(match, current_user.id)
+
     # Already complete — return final state
     if match.status == "complete":
-        me  = get_participant(match, current_user.id)
-        opp = get_opponent(match, current_user.id)
         my_pts  = me.final_score  or 0
         opp_pts = opp.final_score or 0 if opp else 0
         match_winner = (
@@ -250,13 +251,15 @@ async def submit_set(
             judge_status="Match already completed.",
         )
 
+    if match.status != "active":
+        raise HTTPException(status_code=409, detail="Match is not active")
+
     if challenge and challenge.discipline.value != "target":
         raise HTTPException(status_code=501, detail=f"Discipline '{challenge.discipline.value}' not yet implemented")
 
-    me  = get_participant(match, current_user.id)
-    opp = get_opponent(match, current_user.id)
-
     is_set_scoring = challenge and challenge.scoring == ScoringEnum.sets
+    if not is_set_scoring:
+        raise HTTPException(status_code=400, detail="This match does not use set scoring")
     set_tiebreak_active = _set_tiebreak_active(match, db)
 
     if is_set_scoring:
@@ -284,17 +287,21 @@ async def submit_set(
     # It must not contribute another set point, and its arrows remain available
     # to the status endpoint for recovery after a page reload.
     if is_set_scoring and set_tiebreak_active:
-        db.query(ArrowScore).filter(
+        existing_arrows = db.query(ArrowScore).filter(
             ArrowScore.participant_id == me.id,
             ArrowScore.set_number == 0,
-        ).delete()
-        for idx, val in enumerate(sub.arrows):
-            db.add(ArrowScore(
-                participant_id=me.id,
-                arrow_index=idx,
-                value=val,
-                set_number=0,
-            ))
+        ).order_by(ArrowScore.arrow_index).all()
+        if existing_arrows:
+            if [arrow.value for arrow in existing_arrows] != sub.arrows:
+                raise HTTPException(status_code=409, detail="Submitted tiebreak arrow cannot be changed")
+        else:
+            for idx, val in enumerate(sub.arrows):
+                db.add(ArrowScore(
+                    participant_id=me.id,
+                    arrow_index=idx,
+                    value=val,
+                    set_number=0,
+                ))
         db.flush()
 
         my_name = get_profile_name(current_user.id, db)
@@ -379,18 +386,23 @@ async def submit_set(
             ),
         )
 
-    # Persist set arrows (replace on resubmit)
-    db.query(ArrowScore).filter(
+    # Preserve committed arrows: retries with the same payload are safe, but
+    # changing a submitted set while the opponent is pending is not allowed.
+    existing_arrows = db.query(ArrowScore).filter(
         ArrowScore.participant_id == me.id,
         ArrowScore.set_number     == sub.set_number,
-    ).delete()
-    for idx, val in enumerate(sub.arrows):
-        db.add(ArrowScore(
-            participant_id = me.id,
-            arrow_index    = sub.set_number * 10 + idx,
-            value          = val,
-            set_number     = sub.set_number,
-        ))
+    ).order_by(ArrowScore.arrow_index).all()
+    if existing_arrows:
+        if [arrow.value for arrow in existing_arrows] != sub.arrows:
+            raise HTTPException(status_code=409, detail="Submitted set cannot be changed")
+    else:
+        for idx, val in enumerate(sub.arrows):
+            db.add(ArrowScore(
+                participant_id = me.id,
+                arrow_index    = sub.set_number * 10 + idx,
+                value          = val,
+                set_number     = sub.set_number,
+            ))
     db.flush()
 
     my_total  = sum(sub.arrows)
@@ -540,10 +552,12 @@ async def submit_score(
             match_id = tb_child.id
             match    = tb_child
 
+    me = get_participant(match, current_user.id)
     if match.status == "complete":
         return {"status": "already_complete", "match_complete": True, "tiebreak_required": False}
+    if match.status != "active":
+        raise HTTPException(status_code=409, detail="Match is not active")
 
-    me  = get_participant(match, current_user.id)
     opp = get_opponent(match, current_user.id)
 
     # Restore in-memory participant registry if lost after server restart
@@ -555,19 +569,36 @@ async def submit_score(
     # to the 1-arrow child match.
     notify_match_id = match.parent_match_id or match_id
     manager.ensure_match_registered(notify_match_id, match.participants)
+    expected = None
     if challenge:
         if challenge.discipline.value != "target":
             raise HTTPException(status_code=501, detail=f"Discipline '{challenge.discipline.value}' not yet implemented")
+        if challenge.scoring != ScoringEnum.total:
+            raise HTTPException(status_code=400, detail="This match uses set scoring")
         expected = challenge.arrow_count or len(submission.arrows)
         if challenge.scoring == ScoringEnum.total and len(submission.arrows) != expected:
             raise HTTPException(status_code=400, detail=f"Expected {expected} arrows, got {len(submission.arrows)}")
+    else:
+        expected = len(submission.arrows)
+    if set(arrow.arrow_index for arrow in submission.arrows) != set(range(expected)):
+        raise HTTPException(status_code=400, detail=f"Arrow indices must cover the configured series 0–{expected - 1}")
 
-    db.query(ArrowScore).filter(ArrowScore.participant_id == me.id).delete()
-    for a in submission.arrows:
-        db.add(ArrowScore(participant_id=me.id, arrow_index=a.arrow_index, value=a.value))
-    me.final_score  = sum(a.value for a in submission.arrows)
-    me.submitted_at = datetime.utcnow()
-    db.commit()
+    existing_arrows = db.query(ArrowScore).filter(
+        ArrowScore.participant_id == me.id,
+        ArrowScore.set_number.is_(None),
+    ).order_by(ArrowScore.arrow_index).all()
+    submitted_values = {arrow.arrow_index: arrow.value for arrow in submission.arrows}
+    if me.submitted_at is not None:
+        existing_values = {arrow.arrow_index: arrow.value for arrow in existing_arrows}
+        if existing_values != submitted_values:
+            raise HTTPException(status_code=409, detail="Submitted score cannot be changed")
+    else:
+        db.query(ArrowScore).filter(ArrowScore.participant_id == me.id).delete()
+        for a in submission.arrows:
+            db.add(ArrowScore(participant_id=me.id, arrow_index=a.arrow_index, value=a.value))
+        me.final_score  = sum(a.value for a in submission.arrows)
+        me.submitted_at = datetime.utcnow()
+        db.commit()
 
     my_name = get_profile_name(current_user.id, db)
     if opp:
@@ -1006,10 +1037,12 @@ async def forfeit_match(
     db:           Session = Depends(get_db),
 ):
     match = load_match(match_id, db)
+    me = get_participant(match, current_user.id)
     if match.status == "complete":
         raise HTTPException(status_code=400, detail="Match already completed")
+    if match.status != "active":
+        raise HTTPException(status_code=409, detail="Match is not active")
 
-    me  = get_participant(match, current_user.id)
     opp = get_opponent(match, current_user.id)
 
     me.result = MatchResultEnum.loss

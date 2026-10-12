@@ -70,9 +70,9 @@ async function handleRegister() {
   if (pass.length < 8) { showToast('Password min 8 characters', 'error'); return; }
 
   try {
+    const existingUserId = STATE.accessToken && STATE.userId ? STATE.userId : null;
     const data = await api('POST', '/api/auth/register',
-      { email, password: pass, existing_user_id: STATE.userId || null },
-      { skipAuth: true });
+      { email, password: pass, existing_user_id: existingUserId });
     STATE.userId = data.user_id;
     STATE.user   = { isGuest: false, email };
     _storeTokens(data.access_token, data.refresh_token);
@@ -96,11 +96,13 @@ async function handleCreateAccount() {
   if (pass.length < 8) { showToast('Password min 8 chars', 'error'); return; }
 
   try {
+    const existingUserId = STATE.accessToken && STATE.userId ? STATE.userId : null;
     const data = await api('POST', '/api/auth/register',
-      { email, password: pass, existing_user_id: STATE.userId },
-      { skipAuth: true });
+      { email, password: pass, existing_user_id: existingUserId });
+    STATE.userId = data.user_id;
     STATE.user = { isGuest: false, email };
     _storeTokens(data.access_token, data.refresh_token);
+    localStorage.setItem('arrowmatch_userid', data.user_id);
     localStorage.setItem('arrowmatch_user', JSON.stringify(STATE.user));
     updateSettingsAccountSection();
     showToast('Account linked!', 'success');

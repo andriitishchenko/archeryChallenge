@@ -61,6 +61,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 Useful checks:
 
 ```bash
+cd backend && source venv/bin/activate && python -m unittest discover -s tests -v
+cd ..
+node --test frontend/tests/*.test.js
 python3 -m compileall backend
 git diff --check
 curl -fsS http://localhost:8000/health

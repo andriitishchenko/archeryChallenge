@@ -68,7 +68,7 @@ def decode_token(token: str) -> Optional[dict]:
 
 def get_user_id_from_token(token: str) -> Optional[str]:
     payload = decode_token(token)
-    if payload is None:
+    if payload is None or payload.get("type") != "access":
         return None
     return payload.get("sub")
 

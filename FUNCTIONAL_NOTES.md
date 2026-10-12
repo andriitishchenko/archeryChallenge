@@ -15,8 +15,8 @@ This file is the compact status index for current implemented behavior. Detailed
 | Non-target disciplines | Partial | Only `target` is fully implemented; other discipline enum values are placeholders and server scoring rejects them with HTTP 501. |
 | Account deletion/reset | Planned | Requirement exists in [`app_spec.txt`](app_spec.txt); no route or UI flow is present. |
 | Production database migrations | Planned | Startup schema version mismatch recreates the older schema; there is no production migration system. See [architecture constraints](DOCS/decisions/architecture.md). |
-| Automated test suite | Planned | No committed automated test suite or test framework is present; behavior records state the applicable manual verification boundary. |
+| Automated test coverage | Partial | Targeted auth, scoring, match-state, and rematch regressions are in `backend/tests/`; guest account-linking UI checks are in `frontend/tests/`. Behavior records identify remaining API, browser, and realtime gaps. |
 
 ## Verification boundary
 
-Statuses above reflect current code-level implementation and the documented gaps, not a claim of comprehensive end-to-end verification. There is no committed automated test suite. When changing a behavior, verify the affected API/UI/realtime path at the narrowest useful level and update its [behavior record](DOCS/behavior/README.md) with actual regression coverage and any remaining limits.
+Statuses above reflect current code-level implementation and the documented gaps, not a claim of comprehensive end-to-end verification. Targeted backend regression tests cover selected auth, scoring, match-state, and rematch rules; many API, browser, and realtime flows still need additional coverage. When changing a behavior, verify the affected API/UI/realtime path at the narrowest useful level and update its [behavior record](DOCS/behavior/README.md) with actual regression coverage and any remaining limits.

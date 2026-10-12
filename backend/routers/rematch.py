@@ -190,6 +190,8 @@ async def accept_rematch(
         raise HTTPException(status_code=400, detail="Rematch already accepted or cancelled")
 
     me  = get_participant(match, current_user.id)
+    if me.is_creator:
+        raise HTTPException(status_code=403, detail="The proposer cannot accept their own rematch")
     opp = get_opponent(match, current_user.id)
     if not opp:
         raise HTTPException(status_code=400, detail="No opponent in rematch")
@@ -244,6 +246,8 @@ async def decline_rematch(
         raise HTTPException(status_code=400, detail="Rematch is not pending")
 
     me  = get_participant(match, current_user.id)
+    if me.is_creator:
+        raise HTTPException(status_code=403, detail="The proposer cannot decline their own rematch")
     opp = get_opponent(match, current_user.id)
     proposer_id = opp.user_id if opp else None
 
