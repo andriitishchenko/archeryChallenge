@@ -69,11 +69,13 @@ git diff --check
 curl -fsS http://localhost:8000/health
 ```
 
+Before running Uvicorn directly, apply database revisions with `cd backend && alembic upgrade head`.
+
 Use browser automation when available for UI verification. If it is unavailable, use the health endpoint and targeted API checks, and state that UI verification was not run. Do not claim a feature is verified from static inspection alone.
 
 ## High-risk contracts
 
-- `backend/models/database.py`: schema-version mismatch recreates the development database; `SCHEMA_VERSION` changes are destructive.
+- `backend/models/database.py` and `backend/migrations/`: Alembic is the schema authority; migration or version mismatches fail safely. Never add automatic database recreation or destructive downgrade behavior.
 - `backend/services/match.py`, `backend/services/tiebreak.py`, `backend/services/challenges.py`: shared match/tiebreak/challenge rules and serialization.
 - `frontend/js/core/state.js`: `STATE.activeMatches[matchId]` is the client registry for active matches; `STATE.matchState` aliases the current match.
 - `frontend/js/core/event-bus.js`: `EVENT_TYPES` is the cross-module event contract.

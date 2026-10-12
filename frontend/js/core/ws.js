@@ -197,6 +197,10 @@ const WS = (() => {
         EventBus.emit(EVENT_TYPES.WS_MM_CANCELLED, {});
         break;
 
+      case 'mm_error':
+        EventBus.emit(EVENT_TYPES.WS_MM_ERROR, { message: msg.message });
+        break;
+
       case 'pong':
         break; // keepalive — ignore
 

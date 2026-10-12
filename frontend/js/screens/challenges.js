@@ -68,6 +68,16 @@ EventBus.on(EVENT_TYPES.WS_MM_CANCELLED, () => {
   }
 });
 
+EventBus.on(EVENT_TYPES.WS_MM_ERROR, ({ message }) => {
+  if (!_matchmakingPending) return;
+  _matchmakingPending = false;
+  const statusEl = document.getElementById('find-status');
+  const btn = document.querySelector('.find-btn');
+  if (statusEl) statusEl.textContent = '';
+  if (btn) { btn.disabled = false; btn.textContent = 'Find Opponent'; }
+  showToast(message || 'Could not start matchmaking', 'error');
+});
+
 // ── Quick Find ────────────────────────────────────────────────────────────────
 
 function findOpponent() {

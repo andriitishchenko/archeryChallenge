@@ -25,7 +25,7 @@ The current implementation status is recorded in `FUNCTIONAL_NOTES.md`; `app_spe
 | Area | Technology |
 | --- | --- |
 | Backend | FastAPI, SQLAlchemy 2, Python |
-| Database | SQLite by default; PostgreSQL via `DATABASE_URL` |
+| Database | SQLite for local development; PostgreSQL for production |
 | Authentication | JWT access/refresh tokens, bcrypt password hashing |
 | Realtime | One authenticated WebSocket per user at `/ws/user` |
 | Frontend | Classic vanilla JavaScript scripts and CSS; no build step or framework |
@@ -50,7 +50,8 @@ Manual start, useful when dependencies are already installed:
 ```bash
 cd backend
 source venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+alembic upgrade head
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload --ws-max-size 65536 --no-access-log
 ```
 
 For a server deployment where several projects should share one dependency installation, use the root-level `start_server.sh`:
@@ -60,36 +61,46 @@ chmod +x start_server.sh
 ./start_server.sh
 ```
 
-The script installs `backend/requirements.txt` into the current user's Python user-site with `python3 -m pip install --user`, then starts Uvicorn without creating a project-local virtual environment. Set `IP`, `PORT`, `WORKERS`, or `PYTHON_BIN` in the environment to override the defaults. A system-wide installation for all server users requires running pip with administrative privileges; the script intentionally uses the safer per-user shared installation.
+The script installs `backend/requirements.txt` into the current user's Python user-site with `python3 -m pip install --user`, then starts Uvicorn without creating a project-local virtual environment. Set `IP`, `PORT`, or `PYTHON_BIN` in the environment to override the defaults. It runs one worker because WebSocket delivery, rate limits, matchmaking, and expiry state are process-local. A system-wide installation for all server users requires running pip with administrative privileges; the script intentionally uses the safer per-user shared installation.
+
+Build the production container from the repository root so the image includes both backend and frontend files:
+
+```bash
+docker build -f backend/Dockerfile -t arrowmatch .
+```
+
+The image runs one worker, disables Uvicorn access logs because the WebSocket token is carried in the connection URL, limits WebSocket messages to 64 KiB, and exposes a database-backed `/health` check. Configure production values through the container environment; `.dockerignore` excludes local `.env` files and development data. TLS termination and redacting the WebSocket query string in any external proxy logs remain deployment responsibilities.
 
 The SQLite database defaults to `backend/arrowmatch.db` because the server is started from `backend/`. Do not commit local database files.
 
 ## Configuration
 
-Set variables in `backend/.env` or the process environment. Settings are read when the backend imports `core/config.py`.
+Set variables in `backend/.env` or the process environment. The backend loads the ignored local `.env` file without overriding values already supplied by the process environment. Production startup validates its required settings before opening the listener.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SECRET_KEY` | development placeholder | JWT signing key; replace in production |
-| `DATABASE_URL` | `sqlite:///./arrowmatch.db` | SQLAlchemy database URL |
-| `CORS_ORIGINS` | localhost origins | Comma-separated allowed origins |
+| `APP_ENV` | `development` | `development`, `test`, or `production`; production enables strict startup checks |
+| `SECRET_KEY` | development placeholder | JWT signing key; production requires a non-placeholder, varied secret of at least 32 bytes |
+| `DATABASE_URL` | `sqlite:///./arrowmatch.db` | SQLAlchemy URL; production requires PostgreSQL with TLS (`postgresql://` normalizes to psycopg; accepted `sslmode` values are `require`, `verify-ca`, and `verify-full`) |
+| `CORS_ORIGINS` | localhost origins in development; empty in production | Comma-separated origins; production accepts explicit HTTPS origins only; leave empty for a same-origin frontend |
 | `DEBUG` | `false` | Enables `/docs` and `/redoc` |
+| `APP_BASE_URL` | `http://localhost:8000` | Password reset base URL; production requires HTTPS |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Access-token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh-token lifetime |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | `60` | One-time password reset link lifetime |
-| `APP_BASE_URL` | `http://localhost:8000` | Base URL included in reset emails |
 | `SMTP_HOST` / `SMTP_PORT` | unset / `587` | SMTP server for password reset emails |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | unset | Optional SMTP credentials |
 | `SMTP_USE_TLS` | `true` | Use STARTTLS for SMTP |
-| `EMAIL_FROM` | `noreply@arrowmatch.local` | Sender address for reset emails |
+| `EMAIL_FROM` | `noreply@arrowmatch.local` | Sender address for reset emails; production requires a real sender domain |
 | `AUTH_RATE_LIMIT` | `5` | Auth attempts per rate window |
 | `AUTH_RATE_WINDOW` | `900` | Auth rate window in seconds |
+| `GUEST_RATE_LIMIT` | `20` | Guest-session creations per rate window |
 | `BOT_WAIT_SECONDS` | `8` | Delay before bot matchmaking fallback |
 | `MATCHMAKING_TIMEOUT` | `30` | Matchmaking timeout in seconds |
 | `EXPIRY_CHECK_INTERVAL_SECONDS` | `60` | Expiry worker interval |
 | `MATCH_INACTIVITY_SECONDS` | `172800` | Inactivity threshold; 48 hours by default |
 
-The database startup reset constraint is documented in [architecture decisions](DOCS/decisions/architecture.md).
+Run `alembic upgrade head` before starting the application. The baseline migration creates an empty database or adopts an existing version-5 schema only after its structure matches the current SQLAlchemy models. Unknown, older, or structurally different schemas fail without changing application rows; prepare a reviewed migration and backup before deploying such a database. Startup verifies the schema version, applied Alembic revision, and table/index metadata. Database safety and single-worker constraints are documented in [architecture decisions](DOCS/decisions/architecture.md).
 
 ## Architecture
 
@@ -121,7 +132,7 @@ Connect to `/ws/user?token=<access_token>`. The connection is persistent for the
 
 The frontend asks for confirmation before reload/close or browser Back while an unfinished match is active; the in-app Back action uses the same guard.
 
-The server logger `arrowmatch.websocket` records WebSocket connect/disconnect, incoming messages, routing recipients, outgoing messages, offline queueing, and send failures at INFO/WARNING level. Run Uvicorn with its default INFO log level to see these diagnostics.
+The server logger `arrowmatch.websocket` records WebSocket connect/disconnect, message types, routing recipients, delivery outcomes, offline queueing, and send failures at INFO/WARNING level. It omits full message payloads. Uvicorn access logs are disabled by the provided launch commands because the WebSocket token is carried in the connection URL; external proxy logs must also redact that query string.
 
 The browser console records outgoing API requests as `[API →] request` and outgoing WebSocket messages as `[WS →] message`; connection lifecycle and skipped sends are logged too. Sensitive token, password, secret, and authorization values are redacted.
 
@@ -146,11 +157,13 @@ python3 -m compileall backend
 git diff --check
 ```
 
-The committed tests cover selected auth, scoring, match-state, and rematch rules; they do not replace browser, full API, or live WebSocket verification. For user-facing behavior changes, run the server and exercise the affected flow through the UI. Check `/health`, browser console errors, network responses, authentication boundaries, and persistence after a page refresh. If a change affects a database or WebSocket contract, test both sides of that contract.
+The committed tests cover selected auth, scoring, match-state, rematch, migration, production configuration, rate-limit, WebSocket-guard, account-linking, and reset-link behavior. They do not replace full API, browser, or live WebSocket verification. For user-facing behavior changes, run the server and exercise the affected flow through the UI. Check `/health`, browser console errors, network responses, authentication boundaries, and persistence after a page refresh. If a change affects a database or WebSocket contract, test both sides of that contract.
 
 ## Security and operations notes
 
 - Never use the development `SECRET_KEY` in production.
+- Set `APP_ENV=production`, `DEBUG=false`, a generated secret, TLS-enabled PostgreSQL, HTTPS `APP_BASE_URL`, a real `EMAIL_FROM`, and SMTP before deploying. Production startup rejects missing or unsafe values.
+- Run behind a TLS terminator and configure trusted proxy addresses explicitly if forwarded client IPs are needed for rate limiting. The app does not trust client-supplied `X-Forwarded-For` or `X-Real-IP` headers directly.
 - Do not expose `/docs` in production unless intentionally enabled.
 - Do not put secrets in frontend code or commit `.env` files.
 - Validate authorization in the backend even when the UI hides an action.

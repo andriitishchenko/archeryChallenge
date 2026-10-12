@@ -32,7 +32,9 @@ class PasswordRecoveryTests(DatabaseTestCase):
         self.assertEqual(known_response.message, unknown_response.message)
         send_email.assert_called_once()
         reset_url = send_email.call_args.args[1]
-        raw_token = parse_qs(urlparse(reset_url).query)["reset_token"][0]
+        parsed_reset_url = urlparse(reset_url)
+        self.assertNotIn("reset_token", parsed_reset_url.query)
+        raw_token = parse_qs(parsed_reset_url.fragment)["reset_token"][0]
         stored = self.db.query(PasswordResetToken).filter_by(user_id=self.user.id).one()
         self.assertEqual(stored.token_hash, hash_password_reset_token(raw_token))
         self.assertNotEqual(stored.token_hash, raw_token)
@@ -60,8 +62,8 @@ class PasswordRecoveryTests(DatabaseTestCase):
             auth.forgot_password(ForgotPasswordRequest(email=self.user.email), self.db)
             second_url = send_email.call_args.args[1]
 
-        first_token = parse_qs(urlparse(first_url).query)["reset_token"][0]
-        second_token = parse_qs(urlparse(second_url).query)["reset_token"][0]
+        first_token = parse_qs(urlparse(first_url).fragment)["reset_token"][0]
+        second_token = parse_qs(urlparse(second_url).fragment)["reset_token"][0]
         self.assertNotEqual(first_token, second_token)
         with self.assertRaises(HTTPException):
             auth.reset_password(ResetPasswordRequest(token=first_token, password="new-password-2"), self.db)

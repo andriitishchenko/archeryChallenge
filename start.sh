@@ -26,7 +26,8 @@ pip install -q -r requirements.txt
 echo ""
 echo "  ArrowMatch server starting…"
 echo "  UI:       http://localhost:8000/"
-echo "  API docs: http://localhost:8000/docs"
+echo "  API docs: http://localhost:8000/docs (when DEBUG=true)"
 echo ""
 
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+alembic upgrade head
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload --ws-max-size 65536 --no-access-log

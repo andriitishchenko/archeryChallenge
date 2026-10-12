@@ -382,9 +382,10 @@ async function restoreSession() {
 
   const urlParams     = new URLSearchParams(window.location.search);
   const challengeCode = urlParams.get('c');
-  const resetToken    = urlParams.get('reset_token');
+  const resetToken    = new URLSearchParams(window.location.hash.slice(1)).get('reset_token');
 
   if (resetToken) {
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
     showScene('entry');
     showResetPasswordForm(resetToken);
     return;

@@ -64,6 +64,30 @@ class MatchGuardTests(DatabaseTestCase):
 
         self.assertEqual(raised.exception.status_code, 409)
 
+    def test_match_status_does_not_disclose_waiting_match_to_nonparticipant(self):
+        self.add_match("waiting-private", ScoringEnum.total, status="waiting", kind=ChallengeKindEnum.rematch)
+        outsider = User(id="outsider", is_guest=True)
+        self.db.add(outsider)
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            matches.get_match_status("waiting-private", outsider, self.db)
+
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_match_status_rehydrates_participants_for_websocket_delivery(self):
+        match = self.add_match("active-status", ScoringEnum.total)
+        matches.manager.unregister_match(match.id)
+        try:
+            response = matches.get_match_status(match.id, self.first, self.db)
+            self.assertEqual(response.status, "active")
+            self.assertEqual(
+                set(matches.manager._match_participants[match.id]),
+                {self.first.id, self.second.id},
+            )
+        finally:
+            matches.manager.unregister_match(match.id)
+
     def test_total_endpoint_rejects_set_scoring_match(self):
         self.add_match("active-sets", ScoringEnum.sets)
         submission = ScoreSubmission(arrows=[ArrowScoreItem(arrow_index=i, value=8) for i in range(3)])

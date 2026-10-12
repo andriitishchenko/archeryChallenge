@@ -701,6 +701,7 @@ def get_match_status(
     db:           Session = Depends(get_db),
 ):
     match = load_match(match_id, db)
+    me = get_participant(match, current_user.id)
 
     if match.status == "waiting":
         return MatchStatusOut(
@@ -716,9 +717,9 @@ def get_match_status(
             set_tiebreak=False,
         )
 
-    me        = get_participant(match, current_user.id)
     opp       = get_opponent(match, current_user.id)
     challenge = match.challenge
+    manager.ensure_match_registered(match.id, match.participants)
     scoring   = challenge.scoring.value if challenge else "total"
     if scoring == "sets":
         _reconcile_ready_set(match, me, opp, db)
@@ -726,6 +727,8 @@ def get_match_status(
     result    = me.result.value if me.result != MatchResultEnum.pending else None
 
     tb_match     = get_tiebreak_match(match.id, db)
+    if tb_match and tb_match.status != "complete":
+        manager.ensure_match_registered(tb_match.id, tb_match.participants)
     tiebreak_req = tb_match is not None and tb_match.status != "complete"
     set_points_my = count_set_points(me, match.id, db) if scoring == "sets" else 0
     set_points_opp = count_set_points(opp, match.id, db) if (scoring == "sets" and opp) else 0

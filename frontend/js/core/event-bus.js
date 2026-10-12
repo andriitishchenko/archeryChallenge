@@ -70,6 +70,7 @@ const EVENT_TYPES = Object.freeze({
   // Matchmaking
   WS_MM_STATUS:             'ws:mm_status',
   WS_MM_CANCELLED:          'ws:mm_cancelled',
+  WS_MM_ERROR:              'ws:mm_error',
   WS_MM_MATCHED:            'ws:mm_matched',
 
   // Connection state

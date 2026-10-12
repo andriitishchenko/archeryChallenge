@@ -240,7 +240,7 @@ class ArrowScore(Base):
 
 
 class SchemaVersion(Base):
-    """Single-row table. If stored version != SCHEMA_VERSION the DB is recreated."""
+    """Single-row schema marker checked after explicit Alembic migrations."""
     __tablename__ = "schema_version"
 
     id      = Column(Integer, primary_key=True, default=1)

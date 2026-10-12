@@ -11,7 +11,6 @@ REQ_FILE="$APP_DIR/requirements.txt"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 HOST="${IP:-0.0.0.0}"
 PORT="${PORT:-8000}"
-WORKERS="${WORKERS:-2}"
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "Backend directory not found: $APP_DIR" >&2
@@ -28,9 +27,12 @@ echo "Installing ArrowMatch dependencies for the current user..."
 
 cd "$APP_DIR"
 
+"$PYTHON_BIN" -m alembic upgrade head
+
 echo "ArrowMatch server starting on $HOST:$PORT..."
 exec "$PYTHON_BIN" -m uvicorn main:app \
   --host "$HOST" \
   --port "$PORT" \
-  --workers "$WORKERS" \
+  --workers "1" \
+  --ws-max-size "65536" \
   --no-access-log

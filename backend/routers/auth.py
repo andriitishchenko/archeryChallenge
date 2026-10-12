@@ -63,7 +63,7 @@ def _create_tokens(user_id: str) -> dict:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("/guest", response_model=GuestResponse)
+@router.post("/guest", response_model=GuestResponse, dependencies=[Depends(check_rate_limit)])
 def create_guest(db: Session = Depends(get_db)):
     user_id = _generate_user_id()
     db.add(User(id=user_id, is_guest=True))
@@ -145,7 +145,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     ))
     db.commit()
 
-    reset_url = f"{settings.APP_BASE_URL}/?reset_token={quote(raw_token)}"
+    reset_url = f"{settings.APP_BASE_URL}/#reset_token={quote(raw_token)}"
     send_password_reset_email(user.email, reset_url)
     return PasswordResetResponse(message=message)
 

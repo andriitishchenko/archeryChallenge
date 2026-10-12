@@ -11,7 +11,6 @@ Populated when matches are created (via challenges/scores routers).
 Used to find opponents for arrow broadcasting.
 """
 import asyncio
-import json
 import logging
 import uuid
 from collections import defaultdict
@@ -25,11 +24,6 @@ from core.config import settings
 # Max queued offline messages per user — prevents unbounded memory growth
 _PENDING_CAP = 50
 log = logging.getLogger("arrowmatch.websocket")
-
-
-def _message_summary(message: dict) -> str:
-    """Serialize a WS payload consistently for diagnostics without tokens."""
-    return json.dumps(message, ensure_ascii=False, sort_keys=True, default=str)
 
 
 class ConnectionManager:
@@ -100,9 +94,9 @@ class ConnectionManager:
             if len(queue) < _PENDING_CAP:
                 queue.append(message)
                 log.info(
-                    "WS QUEUE user=%s pending=%d type=%s match=%s payload=%s",
+                    "WS QUEUE user=%s pending=%d type=%s match=%s",
                     user_id, len(queue), message.get("type"),
-                    message.get("match_id"), _message_summary(message),
+                    message.get("match_id"),
                 )
             else:
                 log.warning("WS QUEUE_FULL user=%s type=%s", user_id, message.get("type"))
@@ -114,14 +108,14 @@ class ConnectionManager:
 
     async def notify_match_opponent(self, match_id: str, sender_id: str, message: dict):
         """Forward a message from sender to their opponent(s) in a match."""
-        recipients = [
-            uid for uid in self._match_participants.get(match_id, [])
-            if uid != sender_id
-        ]
+        participants = self._match_participants.get(match_id, [])
+        if sender_id not in participants:
+            log.warning("WS ROUTE_REJECT match=%s sender=%s", match_id, sender_id)
+            return
+        recipients = [uid for uid in participants if uid != sender_id]
         log.info(
-            "WS ROUTE match=%s sender=%s recipients=%s type=%s payload=%s",
+            "WS ROUTE match=%s sender=%s recipients=%s type=%s",
             match_id, sender_id, recipients, message.get("type"),
-            _message_summary(message),
         )
         for uid in recipients:
             await self.notify_user(uid, message)
@@ -150,9 +144,9 @@ class ConnectionManager:
         queued: bool = False,
     ):
         log.info(
-            "WS SEND user=%s queued=%s type=%s match=%s payload=%s",
+            "WS SEND user=%s queued=%s type=%s match=%s",
             recipient_id or "unknown", queued, message.get("type"),
-            message.get("match_id"), _message_summary(message),
+            message.get("match_id"),
         )
         try:
             await ws.send_json(message)
@@ -172,8 +166,8 @@ class ConnectionManager:
                 continue
             try:
                 log.info(
-                    "WS SEND user=%s queued=false type=%s match=%s payload=%s",
-                    uid, event.get("type"), event.get("match_id"), _message_summary(event),
+                    "WS SEND user=%s queued=false type=%s match=%s",
+                    uid, event.get("type"), event.get("match_id"),
                 )
                 await ws.send_json(event)
             except Exception:

@@ -7,7 +7,7 @@ This document describes the architecture present in the repository. Setup, envir
 - **Backend:** Python application built with FastAPI, SQLAlchemy 2, Pydantic, and Uvicorn. `backend/main.py` creates the app, mounts routers, serves the SPA, and starts/stops expiry processing.
 - **HTTP layer:** `backend/routers/` handles auth, profiles, challenges, matches, rematches, statistics, and expiry operations. Request/response models are in `backend/schemas/`.
 - **Domain services:** `backend/services/` centralizes challenge creation/serialization and match, scoring, and tiebreak rules shared by routes.
-- **Persistence:** `backend/models/` defines SQLAlchemy models. `backend/models/database.py` creates tables and checks `SCHEMA_VERSION`; the guard's destructive reset constraint is recorded in [architecture decisions](decisions/architecture.md).
+- **Persistence:** `backend/models/` defines SQLAlchemy models. Alembic revisions create and evolve the schema before serving traffic; `backend/models/database.py` verifies the schema version and applied migration head at startup. The non-destructive adoption boundary for the existing schema is recorded in [architecture decisions](decisions/architecture.md).
 - **Realtime:** `backend/ws/` maintains per-user WebSocket connections at `/ws/user`, routes events, and queues bounded offline notifications. Matchmaking fallback logic is not persisted as a server match.
 - **Frontend:** `frontend/index.html` is the SPA shell and declares classic script load order. `frontend/js/core/` contains API access, shared `STATE`, WebSocket translation, and `EventBus`; `match/` contains scoring state/rendering; `screens/` contains auth, challenge, history, and settings flows. CSS is in `frontend/css/`.
 - **Serving:** FastAPI serves the root HTML page and mounts `frontend/` at `/static`.
@@ -33,4 +33,4 @@ The backend validates permissions and owns persisted match and challenge state. 
 
 ## Dependency and startup shape
 
-Backend dependencies are declared in `backend/requirements.txt`. The root `start.sh` creates/uses `backend/venv`, installs those requirements, and starts Uvicorn. There is no frontend package manifest or build configuration; the browser loads the checked-in scripts directly. Exact commands and the separate server deployment script are documented in the root README.
+Backend dependencies are declared in `backend/requirements.txt`. The root `start.sh` creates/uses `backend/venv`, installs those requirements, applies Alembic migrations, and starts one Uvicorn worker. There is no frontend package manifest or build configuration; the browser loads the checked-in scripts directly. Exact commands and the separate server deployment script are documented in the root README.

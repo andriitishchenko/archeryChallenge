@@ -14,8 +14,8 @@ This file is the compact status index for current implemented behavior. Detailed
 | Scheduled-match start semantics | Partial | [Challenge behavior](DOCS/behavior/auth-challenges.md); deadline validation exists, but joining starts the match immediately. |
 | Non-target disciplines | Partial | Only `target` is fully implemented; other discipline enum values are placeholders and server scoring rejects them with HTTP 501. |
 | Account deletion/reset | Planned | Requirement exists in [`app_spec.txt`](app_spec.txt); no route or UI flow is present. |
-| Production database migrations | Planned | Startup schema version mismatch recreates the older schema; there is no production migration system. See [architecture constraints](DOCS/decisions/architecture.md). |
-| Automated test coverage | Partial | Targeted auth, scoring, match-state, and rematch regressions are in `backend/tests/`; guest account-linking UI checks are in `frontend/tests/`. Behavior records identify remaining API, browser, and realtime gaps. |
+| Production database migrations | Partial | Alembic creates fresh schemas and adopts only structurally matching version-5 databases; older or mismatched schemas still need a reviewed migration. See [architecture constraints](DOCS/decisions/architecture.md). |
+| Automated test coverage | Partial | `backend/tests/` covers selected auth, scoring, match-state, migration, production-config, rate-limit, and WebSocket guards; `frontend/tests/` covers account linking and reset-link handling. Behavior records identify remaining API, browser, and realtime gaps. |
 
 ## Verification boundary
 

@@ -30,3 +30,4 @@ Only include fields applicable to the record type. Keep statements factual and s
 - [Match scoring and lifecycle](matches.md)
 - [Realtime, matchmaking, rematch, and client recovery](realtime.md)
 - [History, ranking, achievements, and client presentation](stats-client.md)
+- [Runtime operations](operations.md)

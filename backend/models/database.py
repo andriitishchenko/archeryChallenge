@@ -1,91 +1,64 @@
-"""
-Database engine, session factory, and schema-version-based recreation.
-
-On startup:
-  1. If the DB file does not contain a schema_version table → fresh DB, create all.
-  2. If schema_version.version < SCHEMA_VERSION → drop everything and recreate.
-  3. Otherwise → leave existing data intact.
-
-No migration scripts; incompatible schema bumps recreate from scratch.
-"""
+"""Database engine, session factory, and startup schema verification."""
 import logging
-import os
+from pathlib import Path
 
-from sqlalchemy import create_engine, text, inspect
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from models.models import Base, SCHEMA_VERSION, SchemaVersion
 from core.config import settings
+from models.models import Base, SCHEMA_VERSION
+
 
 log = logging.getLogger(__name__)
-
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
+    connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {},
     pool_pre_ping=True,
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 
-def _get_stored_version() -> int | None:
-    """Return the stored schema version, or None if the table doesn't exist."""
-    insp = inspect(engine)
-    if "schema_version" not in insp.get_table_names():
-        return None
+def verify_schema() -> None:
+    """Require an explicitly migrated database that matches this application."""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "schema_version" not in tables or "alembic_version" not in tables:
+        raise RuntimeError("Database is not initialized; run `alembic upgrade head` before startup.")
+
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT version FROM schema_version LIMIT 1")).fetchone()
-        return row[0] if row else None
-
-
-def _drop_all_tables():
-    """Drop all tables respecting FK constraints (SQLite pragma + standard DROP)."""
-    if "sqlite" in settings.DATABASE_URL:
-        with engine.connect() as conn:
-            conn.execute(text("PRAGMA foreign_keys = OFF"))
-            conn.commit()
-    Base.metadata.drop_all(bind=engine)
-    if "sqlite" in settings.DATABASE_URL:
-        with engine.connect() as conn:
-            conn.execute(text("PRAGMA foreign_keys = ON"))
-            conn.commit()
-
-
-def create_tables():
-    """
-    Ensure the DB schema matches SCHEMA_VERSION.
-    Recreates from scratch if version mismatch is detected.
-    """
-    stored = _get_stored_version()
-
-    if stored is None:
-        log.info("No schema_version found — creating fresh database (v%d).", SCHEMA_VERSION)
-        Base.metadata.create_all(bind=engine)
-        _write_version()
-
-    elif stored < SCHEMA_VERSION:
-        log.warning(
-            "Schema version mismatch (stored=%d, current=%d) — "
-            "dropping all tables and recreating.",
-            stored, SCHEMA_VERSION,
+        schema_row = conn.execute(text("SELECT version FROM schema_version LIMIT 1")).first()
+        applied_revisions = {
+            row[0] for row in conn.execute(text("SELECT version_num FROM alembic_version")).all()
+        }
+        schema_differences = compare_metadata(
+            MigrationContext.configure(conn, opts={"compare_type": True}),
+            Base.metadata,
         )
-        _drop_all_tables()
-        Base.metadata.create_all(bind=engine)
-        _write_version()
 
-    else:
-        log.info("Schema up-to-date (v%d).", stored)
+    if schema_row is None or schema_row[0] != SCHEMA_VERSION:
+        actual = schema_row[0] if schema_row else "missing"
+        raise RuntimeError(
+            f"Database schema version {actual} does not match this application (version {SCHEMA_VERSION}); "
+            "apply a reviewed migration before startup."
+        )
 
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
 
-def _write_version():
-    """Insert or replace the schema version row."""
-    with SessionLocal() as db:
-        existing = db.query(SchemaVersion).first()
-        if existing:
-            existing.version = SCHEMA_VERSION
-        else:
-            db.add(SchemaVersion(id=1, version=SCHEMA_VERSION))
-        db.commit()
+    config = Config(str(_ALEMBIC_INI))
+    expected_revisions = set(ScriptDirectory.from_config(config).get_heads())
+    if applied_revisions != expected_revisions:
+        raise RuntimeError(
+            "Database migrations are not at the application head; run `alembic upgrade head` before startup."
+        )
+    if schema_differences:
+        raise RuntimeError(
+            "Database structure does not match this application; apply a reviewed migration before startup."
+        )
+    log.info("Database schema and migrations are current (%s).", ",".join(sorted(expected_revisions)))
 
 
 def get_db():

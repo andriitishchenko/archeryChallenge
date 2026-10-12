@@ -5,10 +5,10 @@
 - Status: Implemented
 - Scope: `backend/ws/`, `frontend/js/core/ws.js`, `EventBus`, browser/server logging.
 - Goal / acceptance: Route realtime match events through one authenticated user socket and recover eligible offline notifications.
-- Expected behavior and invariants: One `/ws/user` connection per user session; frontend translates server event types before cross-module delivery. Offline queue is bounded.
-- Enforcement and current behavior: User session → maintains one socket → server events pass through `ws.js` and `EventBus`. Offline notification → queues up to 50 messages per user → reconnect flushes queued messages. WebSocket lifecycle/routing → logger records connection, message, recipients, delivery/queue/failure. Browser API/socket send → console logs method/channel and result → tokens, passwords, secrets, and authorization values are redacted.
-- Regression coverage: No committed tests cover socket connection, delivery, queue flush, or redaction; verify these in runtime checks.
-- Remaining limits: No committed automated socket tests.
+- Expected behavior and invariants: One `/ws/user` connection per user session; frontend translates server event types before cross-module delivery. Offline queue is bounded. Only a match participant can publish previews for that match; malformed and oversized client messages are rejected without ending socket cleanup. Logs contain event metadata, not full client payloads or reset/access tokens. Until connection, queue, rate-limit, and expiry state is shared, the server runs one worker process.
+- Enforcement and current behavior: User session → maintains one socket → server events pass through `ws.js` and `EventBus`. Offline notification → queues up to 50 messages per user → reconnect flushes queued messages. Arrow preview → validates identifier, score values, and snapshot size → only registered match participants can forward to their opponent. Matchmaking → loads the user's saved profile and validates filters → client-supplied profile data is ignored. WebSocket lifecycle/routing → logger records event metadata and delivery outcomes without full payloads. Browser API/socket send → console logs method/channel and result → tokens, passwords, secrets, and authorization values are redacted.
+- Regression coverage: `backend/tests/test_production_guards.py` checks participant-only preview forwarding, arrow validation, matchmaking filter validation, and persisted-profile selection. It does not exercise a full WebSocket connection, queue flush, or log redaction.
+- Remaining limits: Full automated socket lifecycle and browser event-routing tests are not present.
 
 ## FEAT-MATCHMAKING-001 — Quick Find and local bot fallback
 
